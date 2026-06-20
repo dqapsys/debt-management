@@ -1,9 +1,11 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>DQAP Debt Management</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect fill='%23006994' width='64' height='64' rx='12'/%3E%3Ctext x='32' y='43' font-size='36' text-anchor='middle'%3E%F0%9F%92%B0%3C/text%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -820,21 +822,39 @@ let currentUser = null;
 let currentUserRole = null;
 let currentUserData = null;
 let wikiSession = null;
+let authInitialized = false;
 
 // ══ WIKI-INTEGRATED AUTHENTICATION ══
 // Check for Wiki session or fallback to standalone mode
 function initializeAuth() {
-  // Wiki-only mode: Check for Wiki session
-  let sess = sessionStorage.getItem('dqap_sess');
-  
-  // Fallback: Check URL parameters (if opened in new tab)
-  if (!sess && window.location.search.includes('sess=')) {
-    const params = new URLSearchParams(window.location.search);
-    sess = params.get('sess');
-    if (sess) {
-      // Restore to sessionStorage for this session
-      sessionStorage.setItem('dqap_sess', sess);
-    }
+  // DOMContentLoaded and load both call this function; authenticate only once.
+  if (authInitialized) return;
+  authInitialized = true;
+
+  let sess = null;
+  let receivedHandoff = false;
+
+  // Storage can be restricted in an embedded browser, so it must not be the only handoff.
+  try { sess = sessionStorage.getItem('dqap_sess'); } catch (e) {
+    console.warn('Session storage is unavailable; using the Wiki handoff instead.');
+  }
+
+  // Preferred handoff: URL fragment (not sent to the web server).
+  if (!sess) {
+    const fragment = new URLSearchParams(window.location.hash.slice(1));
+    sess = fragment.get('sess');
+    receivedHandoff = !!sess;
+  }
+
+  // Backward compatibility with older Wiki deployments that used ?sess=.
+  if (!sess) {
+    sess = new URLSearchParams(window.location.search).get('sess');
+    receivedHandoff = !!sess;
+  }
+
+  if (sess) {
+    try { sessionStorage.setItem('dqap_sess', sess); } catch (e) { /* handoff still works */ }
+    if (receivedHandoff) history.replaceState(null, document.title, window.location.pathname);
   }
   
   if (sess) {
