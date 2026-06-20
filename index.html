@@ -397,8 +397,17 @@
 
 <div class="container">
   <div class="header">
-    <h1><i class="ti ti-coin"></i> Debt Management</h1>
-    <p>Track customer debts, link to projects, manage collections</p>
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+      <div>
+        <h1><i class="ti ti-coin"></i> Debt Management</h1>
+        <p>Track customer debts, link to projects, manage collections</p>
+      </div>
+      <div style="background: rgba(255,255,255,0.2); padding: 12px 16px; border-radius: 8px; backdrop-filter: blur(10px);">
+        <div style="font-size: 11px; opacity: 0.9; margin-bottom: 6px;">LOGGED IN AS</div>
+        <div style="font-size: 14px; font-weight: 600;" id="currentUser">—</div>
+        <button class="btn" onclick="switchUser()" style="margin-top: 8px; background: rgba(255,255,255,0.3); color: #fff; border: 1px solid rgba(255,255,255,0.5); font-size: 10px; padding: 4px 8px;">Switch</button>
+      </div>
+    </div>
   </div>
   
   <div class="tabs">
@@ -689,6 +698,149 @@
     </div>
   </div>
 </div>
+
+<!-- ══ USER LOGIN MODAL ══ -->
+<div id="userLoginModal" class="modal">
+  <div class="modal-content" style="max-width: 500px;">
+    <div class="modal-header">👤 Select Your Role</div>
+    
+    <div style="padding: 20px;">
+      <div style="font-size: 14px; color: var(--t2); margin-bottom: 20px;">Who are you?</div>
+      
+      <!-- ADMIN SECTION -->
+      <div style="background: linear-gradient(135deg, #FFD700, #FFA500); padding: 12px; border-radius: 8px; margin-bottom: 16px;">
+        <div style="font-size: 11px; font-weight: 600; color: #333; text-transform: uppercase; margin-bottom: 10px;">👑 Admin Access</div>
+        
+        <button class="btn primary" onclick="setUser('Pratim')" style="width: 100%; padding: 12px; margin-bottom: 8px; background: linear-gradient(135deg, #FFD700, #FFA500); border: none; color: #333; font-weight: 600;">
+          ⚙️ Pratim - Technical Admin
+        </button>
+        
+        <button class="btn primary" onclick="setUser('Updesh')" style="width: 100%; padding: 12px; background: linear-gradient(135deg, #FFD700, #FFA500); border: none; color: #333; font-weight: 600;">
+          👨‍💼 Updesh - Admin (CEO)
+        </button>
+      </div>
+      
+      <!-- TEAM SECTION -->
+      <div style="background: #E4F1FA; padding: 12px; border-radius: 8px; margin-bottom: 16px;">
+        <div style="font-size: 11px; font-weight: 600; color: var(--p); text-transform: uppercase; margin-bottom: 10px;">📋 CSV & Collections</div>
+        
+        <button class="btn primary" onclick="setUser('Dev')" style="width: 100%; padding: 12px; margin-bottom: 8px; background: linear-gradient(135deg, #FF6B6B, #FF5252); border: none;">
+          <i class="ti ti-upload"></i> Dev (CSV Upload)
+        </button>
+        
+        <button class="btn primary" onclick="setUser('Ravi')" style="width: 100%; padding: 12px; margin-bottom: 8px;">
+          🏃 Ravi - Collections
+        </button>
+        
+        <button class="btn primary" onclick="setUser('Jawed')" style="width: 100%; padding: 12px; margin-bottom: 8px;">
+          📞 Jawed - Follow-up
+        </button>
+        
+        <button class="btn primary" onclick="setUser('Chetan')" style="width: 100%; padding: 12px; margin-bottom: 8px;">
+          💼 Chetan - Sales
+        </button>
+        
+        <button class="btn primary" onclick="setUser('Keshav')" style="width: 100%; padding: 12px;">
+          📋 Keshav - Admin
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ NOTIFICATION BADGE ══ -->
+<div id="notificationBadge" style="display: none; position: fixed; top: 20px; right: 20px; z-index: 999;">
+  <div style="background: #FF5252; color: #fff; padding: 12px 16px; border-radius: 8px; box-shadow: 0 4px 12px rgba(255,82,82,0.3); cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 8px;" onclick="openNotificationModal()">
+    <span style="width: 8px; height: 8px; background: #FFD700; border-radius: 50%; animation: pulse 2s infinite;"></span>
+    <span id="notificationText">Action Required</span>
+    <i class="ti ti-bell" style="font-size: 16px;"></i>
+  </div>
+</div>
+
+<!-- ══ CSV UPLOAD REMINDER (Dev Only) ══ -->
+<div id="csvUploadModal" class="modal">
+  <div class="modal-content" style="max-width: 500px;">
+    <div class="modal-header" style="background: linear-gradient(135deg, #FF6B6B, #FF5252); color: #fff; margin: -20px -20px 20px -20px; padding: 20px; border-radius: 10px 10px 0 0;">
+      <i class="ti ti-alert-triangle" style="font-size: 20px; margin-right: 10px;"></i>
+      Monday CSV Upload Reminder
+    </div>
+    
+    <div style="padding: 20px;">
+      <div style="background: #FFF3E0; border-left: 4px solid #FF6B6B; padding: 12px; border-radius: 4px; margin-bottom: 16px;">
+        <div style="font-weight: 600; color: #E65100;">⏰ Time to Update Data</div>
+        <div style="font-size: 12px; color: var(--t2); margin-top: 4px;">It's Monday morning! Please upload the latest Tally CSV.</div>
+      </div>
+      
+      <div style="background: #f5f5f5; padding: 12px; border-radius: 4px; margin-bottom: 16px;">
+        <div style="font-size: 11px; font-weight: 600; color: var(--t2); text-transform: uppercase; margin-bottom: 8px;">📋 Instructions</div>
+        <div style="font-size: 12px; line-height: 1.6;">
+          1. Export latest AR data from Tally<br>
+          2. Go to "Upload CSV" tab<br>
+          3. Select file and upload<br>
+          4. All team members will be notified
+        </div>
+      </div>
+      
+      <div style="background: #E4F1FA; padding: 12px; border-radius: 4px; margin-bottom: 16px;">
+        <div style="font-size: 11px; font-weight: 600; color: var(--p); margin-bottom: 4px;">📊 Last Uploaded</div>
+        <div style="font-size: 13px; font-weight: 600;" id="lastUploadTime">Never</div>
+      </div>
+      
+      <div style="display: flex; gap: 8px;">
+        <button class="btn" onclick="closeModal('csvUploadModal')" style="flex: 1;">Remind Later</button>
+        <button class="btn primary" onclick="goToUploadTab()" style="flex: 1; background: linear-gradient(135deg, #FF6B6B, #FF5252); border: none;">
+          <i class="ti ti-upload"></i> Go to Upload
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ COMMITMENT ENTRY REMINDER (Team Members) ══ -->
+<div id="commitmentReminderModal" class="modal">
+  <div class="modal-content" style="max-width: 500px;">
+    <div class="modal-header" style="background: linear-gradient(135deg, #4CAF50, #45a049); color: #fff; margin: -20px -20px 20px -20px; padding: 20px; border-radius: 10px 10px 0 0;">
+      <i class="ti ti-checklist" style="font-size: 20px; margin-right: 10px;"></i>
+      New Data Available - Enter Your Commitments
+    </div>
+    
+    <div style="padding: 20px;">
+      <div style="background: #E8F5E9; border-left: 4px solid #4CAF50; padding: 12px; border-radius: 4px; margin-bottom: 16px;">
+        <div style="font-weight: 600; color: #2E7D32;">✓ CSV Updated</div>
+        <div style="font-size: 12px; color: var(--t2); margin-top: 4px;">Dev has uploaded the latest customer data. Please review and enter your collection commitments.</div>
+      </div>
+      
+      <div style="background: #f5f5f5; padding: 12px; border-radius: 4px; margin-bottom: 16px;">
+        <div style="font-size: 11px; font-weight: 600; color: var(--t2); text-transform: uppercase; margin-bottom: 8px;">📋 Your Tasks</div>
+        <div style="font-size: 12px; line-height: 1.6;">
+          1. Review "Summary" tab for new customers<br>
+          2. Allocate to projects if needed<br>
+          3. Set your collection commitments<br>
+          4. Enter collected amounts as you collect
+        </div>
+      </div>
+      
+      <div style="background: #E4F1FA; padding: 12px; border-radius: 4px; margin-bottom: 16px;">
+        <div style="font-size: 11px; font-weight: 600; color: var(--p); margin-bottom: 4px;">🔔 Uploaded At</div>
+        <div style="font-size: 13px; font-weight: 600;" id="uploadNotifyTime">—</div>
+      </div>
+      
+      <div style="display: flex; gap: 8px;">
+        <button class="btn" onclick="closeModal('commitmentReminderModal')" style="flex: 1;">Later</button>
+        <button class="btn primary" onclick="goToSummaryTab()" style="flex: 1;">
+          <i class="ti ti-arrow-right"></i> Go to Summary
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+</style>
 
 <script>
 // Firebase Configuration
@@ -1339,6 +1491,207 @@ function loadFromLocalStorage() {
   commitmentsData = JSON.parse(localStorage.getItem('debt_commitments') || '[]');
 }
 
+// User Management
+function setUser(userName) {
+  localStorage.setItem('debt_currentUser', userName);
+  const userRole = getUserRole(userName);
+  document.getElementById('currentUser').textContent = `${userName} (${userRole})`;
+  closeModal('userLoginModal');
+  
+  showToast(`👋 Welcome, ${userName}!`, 'success');
+  
+  // Check for notifications
+  setTimeout(checkNotifications, 500);
+}
+
+function getUserRole(userName) {
+  const roles = {
+    'Pratim': '⚙️ Tech Admin',
+    'Updesh': '👑 Admin CEO',
+    'Dev': '📤 CSV Upload',
+    'Ravi': '🏃 Collections',
+    'Jawed': '📞 Follow-up',
+    'Chetan': '💼 Sales',
+    'Keshav': '📋 Admin'
+  };
+  return roles[userName] || 'User';
+}
+
+function switchUser() {
+  localStorage.removeItem('debt_currentUser');
+  clearFaviconBadge();
+  document.getElementById('userLoginModal').classList.add('active');
+}
+
+// Favicon Badge System
+function updateFaviconBadge(notificationText) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 64;
+  canvas.height = 64;
+  
+  const ctx = canvas.getContext('2d');
+  
+  // Draw base favicon (app icon)
+  ctx.fillStyle = '#006994';
+  ctx.fillRect(0, 0, 64, 64);
+  
+  // Draw coin icon
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 40px Arial';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('💰', 32, 32);
+  
+  // Draw notification badge
+  ctx.fillStyle = '#FF5252';
+  ctx.beginPath();
+  ctx.arc(52, 12, 12, 0, 2 * Math.PI);
+  ctx.fill();
+  
+  // Draw notification number/indicator
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 14px Arial';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('!', 52, 12);
+  
+  // Update favicon
+  const link = document.querySelector("link[rel='icon']") || document.createElement('link');
+  link.rel = 'icon';
+  link.href = canvas.toDataURL();
+  document.head.appendChild(link);
+  
+  // Update browser title
+  document.title = `🔔 ${notificationText} - Debt Management`;
+}
+
+function clearFaviconBadge() {
+  // Reset favicon to default
+  const link = document.querySelector("link[rel='icon']");
+  if (link) {
+    link.href = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect fill="%23006994" width="64" height="64"/><text x="32" y="40" font-size="40" text-anchor="middle" fill="%23fff">💰</text></svg>';
+  }
+  document.title = 'Debt Management';
+}
+
+function isAdmin(userName) {
+  return ['Pratim', 'Updesh'].includes(userName);
+}
+
+function isCSVUploader(userName) {
+  return ['Dev', 'Pratim', 'Updesh'].includes(userName);
+}
+
+function canEditAllCommitments(userName) {
+  return ['Pratim', 'Updesh'].includes(userName);
+}
+
+function checkAdminNotifications() {
+  const currentUser = localStorage.getItem('debt_currentUser');
+  
+  if (!isAdmin(currentUser)) return;
+  
+  // Admins see all users' pending commitments summary
+  const uncommittedCount = allocationsData.filter(a => 
+    !commitmentsData.some(c => c.allocationId === a.id)
+  ).length;
+  
+  if (uncommittedCount > 0) {
+    showNotificationBadge(`⚠️ ${uncommittedCount} Pending Allocations`);
+  }
+}
+
+function checkNotifications() {
+  const currentUser = localStorage.getItem('debt_currentUser');
+  if (!currentUser) return;
+  
+  // Admin-specific checks
+  if (isAdmin(currentUser)) {
+    checkAdminNotifications();
+    return;
+  }
+  
+  const now = new Date();
+  const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday
+  const hours = now.getHours();
+  const csvUploadTime = localStorage.getItem('debt_lastUploadTime');
+  const uploadNotificationSeen = localStorage.getItem('debt_uploadNotificationSeen');
+  
+  // Check for Monday 10 AM CSV upload reminder (Dev + Admins)
+  if (isCSVUploader(currentUser) && dayOfWeek === 1 && hours >= 10 && hours < 11) {
+    const lastReminder = localStorage.getItem('debt_lastCsvReminder');
+    const today = new Date().toDateString();
+    
+    if (lastReminder !== today) {
+      showCSVUploadReminder();
+      localStorage.setItem('debt_lastCsvReminder', today);
+      showNotificationBadge('📤 Upload CSV Now');
+    }
+  }
+  
+  // Check for new CSV upload notification (all users except Dev and Admins)
+  if (!isCSVUploader(currentUser) && csvUploadTime && !uploadNotificationSeen) {
+    const uploadTime = new Date(csvUploadTime);
+    const timeSinceUpload = (now - uploadTime) / 1000 / 60; // in minutes
+    
+    if (timeSinceUpload < 30) { // Show notification if uploaded in last 30 minutes
+      showCommitmentReminder();
+      localStorage.setItem('debt_uploadNotificationSeen', 'true');
+      showNotificationBadge('📋 Enter Your Commitments');
+    }
+  }
+}
+
+function showCSVUploadReminder() {
+  const lastUploadTime = localStorage.getItem('debt_lastUploadTime');
+  if (lastUploadTime) {
+    const date = new Date(lastUploadTime);
+    document.getElementById('lastUploadTime').textContent = date.toLocaleString('en-IN');
+  }
+  document.getElementById('csvUploadModal').classList.add('active');
+}
+
+function showCommitmentReminder() {
+  const uploadTime = localStorage.getItem('debt_lastUploadTime');
+  if (uploadTime) {
+    const date = new Date(uploadTime);
+    document.getElementById('uploadNotifyTime').textContent = date.toLocaleString('en-IN');
+  }
+  document.getElementById('commitmentReminderModal').classList.add('active');
+}
+
+function showNotificationBadge(text) {
+  document.getElementById('notificationText').textContent = text;
+  document.getElementById('notificationBadge').style.display = 'flex';
+  updateFaviconBadge(text);
+}
+
+function hideNotificationBadge() {
+  document.getElementById('notificationBadge').style.display = 'none';
+  clearFaviconBadge();
+}
+
+function openNotificationModal() {
+  const currentUser = localStorage.getItem('debt_currentUser');
+  if (currentUser === 'Dev') {
+    showCSVUploadReminder();
+  } else {
+    showCommitmentReminder();
+  }
+}
+
+function goToUploadTab() {
+  closeModal('csvUploadModal');
+  hideNotificationBadge();
+  switchTab('upload');
+}
+
+function goToSummaryTab() {
+  closeModal('commitmentReminderModal');
+  hideNotificationBadge();
+  switchTab('summary');
+}
+
 // Toast
 function showToast(msg, type = 'success') {
   const toast = document.createElement('div');
@@ -1348,8 +1701,31 @@ function showToast(msg, type = 'success') {
   setTimeout(() => toast.remove(), 3000);
 }
 
+// Update CSV upload timestamp when saving
+const originalSaveToLocalStorage = saveToLocalStorage;
+function saveToLocalStorage() {
+  originalSaveToLocalStorage();
+  
+  // If CSV data was just uploaded, save timestamp
+  if (csvData.length > 0) {
+    const lastUploadTime = localStorage.getItem('debt_lastUploadTime');
+    if (!lastUploadTime || new Date() - new Date(lastUploadTime) > 300000) { // If no upload in last 5 mins
+      localStorage.setItem('debt_lastUploadTime', new Date().toISOString());
+      localStorage.removeItem('debt_uploadNotificationSeen'); // Reset for new users to see
+    }
+  }
+}
+
 // Initialize
 loadFromLocalStorage();
+const savedUser = localStorage.getItem('debt_currentUser');
+
+if (savedUser) {
+  setUser(savedUser);
+} else {
+  document.getElementById('userLoginModal').classList.add('active');
+}
+
 updateAllTabs();
 loadProjects();
 </script>
