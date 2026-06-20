@@ -825,7 +825,17 @@ let wikiSession = null;
 // Check for Wiki session or fallback to standalone mode
 function initializeAuth() {
   // Wiki-only mode: Check for Wiki session
-  const sess = sessionStorage.getItem('dqap_sess');
+  let sess = sessionStorage.getItem('dqap_sess');
+  
+  // Fallback: Check URL parameters (if opened in new tab)
+  if (!sess && window.location.search.includes('sess=')) {
+    const params = new URLSearchParams(window.location.search);
+    sess = params.get('sess');
+    if (sess) {
+      // Restore to sessionStorage for this session
+      sessionStorage.setItem('dqap_sess', sess);
+    }
+  }
   
   if (sess) {
     // User logged in via Wiki - auto-login
@@ -834,7 +844,7 @@ function initializeAuth() {
       autoLoginFromWiki(wikiSession);
     } catch (e) {
       console.error('❌ Wiki session parse error:', e);
-      showError('Session error. Please refresh the page.');
+      showError('Session error. Please login to Wiki and try again.');
     }
   } else {
     // No Wiki session - show error message
