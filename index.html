@@ -3,19 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Debt Management | DQAP</title>
-  
-  <!-- Firebase -->
+  <title>DQAP Debt Management</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
   <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
   
-  <!-- Libraries -->
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    
     :root {
       --p: #006994;
       --pd: #004A68;
@@ -24,197 +22,43 @@
       --card: #fff;
       --t1: #111;
       --t2: #666;
-      --bd: rgba(0, 0, 0, 0.11);
-      --bds: rgba(0, 0, 0, 0.22);
+      --bd: rgba(0,0,0,.11);
+      --bds: rgba(0,0,0,.22);
       --rad: 10px;
-      --success: #3F704D;
     }
     
     body {
-      font-family: 'DM Sans', 'Segoe UI', sans-serif;
+      font-family: 'DM Sans', 'Segoe UI', system-ui, sans-serif;
       background: var(--bg);
       color: var(--t1);
       font-size: 13px;
+    }
+    
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 20px;
     }
     
     .header {
       background: linear-gradient(135deg, var(--p), var(--pd));
-      color: white;
-      padding: 20px 24px;
+      color: #fff;
+      padding: 30px 20px;
       border-radius: var(--rad);
       margin-bottom: 20px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
     }
     
     .header h1 {
-      font-size: 18px;
-      margin-bottom: 4px;
+      font-size: 28px;
+      margin-bottom: 5px;
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
     }
     
     .header p {
-      font-size: 13px;
       opacity: 0.9;
-    }
-    
-    .header-right {
-      display: flex;
-      gap: 12px;
-      align-items: center;
-    }
-    
-    .logout-btn {
-      background: rgba(255, 255, 255, 0.2);
-      color: white;
-      border: 1px solid rgba(255, 255, 255, 0.3);
-      padding: 8px 16px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 12px;
-      transition: all 0.2s;
-    }
-    
-    .logout-btn:hover {
-      background: rgba(255, 255, 255, 0.3);
-    }
-    
-    .login-screen {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
-      background: var(--bg);
-    }
-    
-    .login-card {
-      background: var(--card);
-      border-radius: var(--rad);
-      padding: 40px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-      width: 100%;
-      max-width: 400px;
-    }
-    
-    .login-header {
-      text-align: center;
-      margin-bottom: 32px;
-    }
-    
-    .login-header-icon {
-      font-size: 48px;
-      margin-bottom: 16px;
-    }
-    
-    .login-header h2 {
-      font-size: 20px;
-      color: var(--t1);
-      margin-bottom: 8px;
-    }
-    
-    .login-header p {
-      color: var(--t2);
-      font-size: 13px;
-    }
-    
-    .form-group {
-      margin-bottom: 16px;
-    }
-    
-    .form-group label {
-      display: block;
-      margin-bottom: 6px;
-      font-weight: 500;
-      color: var(--t1);
-      font-size: 12px;
-    }
-    
-    .form-group input {
-      width: 100%;
-      padding: 10px 12px;
-      border: 1px solid var(--bds);
-      border-radius: 6px;
-      font-size: 13px;
-      font-family: inherit;
-      transition: all 0.2s;
-    }
-    
-    .form-group input:focus {
-      outline: none;
-      border-color: var(--p);
-      box-shadow: 0 0 0 3px rgba(0, 105, 148, 0.1);
-    }
-    
-    .login-btn {
-      width: 100%;
-      padding: 12px;
-      background: var(--p);
-      color: white;
-      border: none;
-      border-radius: 6px;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-    
-    .login-btn:hover {
-      background: var(--pd);
-    }
-    
-    .login-error {
-      color: #D32F2F;
-      font-size: 12px;
-      margin-top: 12px;
-      padding: 10px;
-      background: #FFEBEE;
-      border-radius: 4px;
-      display: none;
-    }
-    
-    .credentials-hint {
-      margin-top: 20px;
-      padding-top: 20px;
-      border-top: 1px solid var(--bd);
-      font-size: 12px;
-      color: var(--t2);
-      text-align: center;
-    }
-    
-    .credentials-list {
-      margin-top: 12px;
-      font-size: 11px;
-      background: var(--bg);
-      padding: 10px;
-      border-radius: 4px;
-      max-height: 200px;
-      overflow-y: auto;
-    }
-    
-    .credentials-list div {
-      margin: 6px 0;
-      padding: 4px 0;
-      border-bottom: 1px solid var(--bds);
-    }
-    
-    .credentials-list div:last-child {
-      border-bottom: none;
-    }
-    
-    .content {
-      padding: 20px 24px;
-    }
-    
-    .user-info {
-      font-size: 13px;
-      color: var(--t2);
-    }
-    
-    .user-info strong {
-      color: var(--t1);
+      font-size: 14px;
     }
     
     .tabs {
@@ -266,372 +110,723 @@
       margin-bottom: 20px;
     }
     
-    .btn {
-      background: var(--p);
-      color: white;
-      border: none;
-      padding: 10px 16px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 12px;
-      font-weight: 600;
-      transition: all 0.2s;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-    }
-    
-    .btn:hover {
-      background: var(--pd);
-    }
-    
-    .table-wrap {
-      overflow-x: auto;
-      border-radius: var(--rad);
-      border: 0.5px solid var(--bd);
-    }
-    
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 12px;
-    }
-    
-    th {
-      background: var(--bg);
-      padding: 12px;
-      text-align: left;
-      font-weight: 600;
-      border-bottom: 1px solid var(--bd);
-      color: var(--t1);
-    }
-    
-    td {
-      padding: 12px;
-      border-bottom: 1px solid var(--bd);
-    }
-    
-    tr:hover {
-      background: var(--bg);
-    }
-    
     .stats {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 16px;
+      gap: 15px;
       margin-bottom: 20px;
     }
     
-    .stat-card {
+    .stat {
       background: var(--card);
-      border: 0.5px solid var(--bd);
       border-radius: var(--rad);
-      padding: 16px;
+      border: 0.5px solid var(--bd);
+      padding: 15px;
       display: flex;
       gap: 12px;
+      align-items: center;
     }
     
     .stat-icon {
       width: 40px;
       height: 40px;
+      background: var(--pl);
       border-radius: 8px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 18px;
-      background: var(--pl);
+      color: var(--p);
+      font-size: 20px;
+      flex-shrink: 0;
     }
     
     .stat-value {
-      font-size: 18px;
+      font-size: 20px;
       font-weight: 600;
-      color: var(--t1);
+      color: var(--p);
     }
     
     .stat-label {
       font-size: 11px;
       color: var(--t2);
       text-transform: uppercase;
-      letter-spacing: 0.5px;
     }
     
-    .input-group {
-      margin-bottom: 16px;
-    }
-    
-    .input-group label {
-      display: block;
-      margin-bottom: 6px;
-      font-weight: 500;
-      color: var(--t1);
-      font-size: 12px;
-    }
-    
-    .input-group input,
-    .input-group select {
+    table {
       width: 100%;
-      padding: 10px 12px;
-      border: 1px solid var(--bds);
-      border-radius: 6px;
-      font-size: 13px;
+      border-collapse: collapse;
+    }
+    
+    th {
+      padding: 12px;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      background: #f5f5f5;
+      border-bottom: 0.5px solid var(--bd);
+    }
+    
+    td {
+      padding: 12px;
+      border-bottom: 0.5px solid var(--bd);
+    }
+    
+    tr:hover td {
+      background: #fafafa;
+    }
+    
+    .btn {
+      padding: 8px 14px;
+      border-radius: 7px;
+      border: 0.5px solid var(--bds);
+      background: transparent;
+      color: var(--t1);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      transition: all 0.15s;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
       font-family: inherit;
     }
     
-    .input-group input:focus,
-    .input-group select:focus {
-      outline: none;
+    .btn:hover {
+      background: #f0f0f0;
+    }
+    
+    .btn.primary {
+      background: var(--p);
+      color: #fff;
       border-color: var(--p);
-      box-shadow: 0 0 0 3px rgba(0, 105, 148, 0.1);
+    }
+    
+    .btn.primary:hover {
+      background: var(--pd);
+    }
+    
+    .btn.sm {
+      padding: 6px 10px;
+      font-size: 11px;
+    }
+    
+    input[type="file"],
+    input[type="text"],
+    input[type="number"],
+    input[type="date"],
+    select {
+      padding: 8px 12px;
+      border-radius: 7px;
+      border: 0.5px solid var(--bds);
+      background: #fafafa;
+      font-size: 12px;
+      color: var(--t1);
+      font-family: inherit;
+      outline: none;
+    }
+    
+    input[type="file"]:focus,
+    input[type="text"]:focus,
+    input[type="number"]:focus,
+    input[type="date"]:focus,
+    select:focus {
+      border-color: var(--p);
+      background: #fff;
+    }
+    
+    .form-group {
+      margin-bottom: 12px;
+    }
+    
+    .form-group label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+      color: var(--t1);
+    }
+    
+    .form-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+    }
+    
+    .badge {
+      display: inline-flex;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    
+    .badge.success {
+      background: #E8F5E9;
+      color: #3F704D;
+    }
+    
+    .badge.warning {
+      background: #FFF3E0;
+      color: #E65100;
+    }
+    
+    .badge.pending {
+      background: #FFF3E0;
+      color: #E65100;
+    }
+    
+    .modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .modal.active {
+      display: flex;
+    }
+    
+    .modal-content {
+      background: var(--card);
+      border-radius: var(--rad);
+      padding: 20px;
+      max-width: 600px;
+      width: 90%;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+    }
+    
+    .modal-header {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+    
+    .empty {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--t2);
+    }
+    
+    .empty-icon {
+      font-size: 48px;
+      margin-bottom: 10px;
+    }
+    
+    .leaderboard-item {
+      background: var(--card);
+      border-radius: var(--rad);
+      padding: 16px;
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-left: 4px solid var(--p);
+    }
+    
+    .leaderboard-rank {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--p);
+      min-width: 40px;
+    }
+    
+    .leaderboard-user {
+      flex: 1;
+      margin-left: 12px;
+    }
+    
+    .leaderboard-name {
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    
+    .leaderboard-stats {
+      display: flex;
+      gap: 20px;
+      margin-left: auto;
+    }
+    
+    .stat-item {
+      text-align: center;
+    }
+    
+    .stat-item-label {
+      font-size: 10px;
+      color: var(--t2);
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    
+    .stat-item-value {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--p);
     }
     
     .toast {
       position: fixed;
       bottom: 20px;
       right: 20px;
-      background: var(--success);
-      color: white;
-      padding: 12px 20px;
-      border-radius: 6px;
+      background: #1B5E20;
+      color: #fff;
+      padding: 12px 16px;
+      border-radius: 8px;
       font-size: 12px;
-      z-index: 1000;
-      animation: slideIn 0.3s ease-out;
+      z-index: 2000;
+      animation: slideIn 0.3s ease;
+    }
+    
+    .toast.error {
+      background: #B71C1C;
     }
     
     @keyframes slideIn {
       from { transform: translateY(20px); opacity: 0; }
       to { transform: translateY(0); opacity: 1; }
     }
-
-    h3 {
-      font-size: 14px;
-      color: var(--t1);
-    }
   </style>
 </head>
 <body>
 
-<!-- LOGIN SCREEN -->
-<div id="loginScreen" class="login-screen">
-  <div class="login-card">
-    <div class="login-header">
-      <div class="login-header-icon">💰</div>
-      <h2>Debt Management</h2>
-      <p>Team Collections Portal</p>
-    </div>
-    
-    <form id="loginForm" onsubmit="handleLogin(event)">
-      <div class="form-group">
-        <label for="email">Email or Name</label>
-        <input type="text" id="email" placeholder="e.g., Updesh or updesh@dqap.in" required>
-      </div>
-      
-      <div class="form-group">
-        <label for="password">Password</label>
-        <input type="password" id="password" placeholder="Enter password" required>
-      </div>
-      
-      <button type="submit" class="login-btn" id="loginBtn">Sign In</button>
-      <div class="login-error" id="loginError"></div>
-    </form>
-    
-    <div class="credentials-hint">
-      <strong>Demo Credentials:</strong>
-      <div class="credentials-list" id="credentialsList"></div>
-    </div>
-  </div>
-</div>
-
-<!-- MAIN SCREEN -->
-<div id="mainScreen" style="display: none;">
+<div id="appContainer" style="display: none;">
+<div class="container">
   <div class="header">
-    <div>
-      <h1>💰 Debt Management</h1>
-      <p>Track collections and team commitments</p>
-    </div>
-    <div class="header-right">
-      <div class="user-info">
-        <strong id="userName">User</strong> <span id="userRole"></span>
-        <button class="logout-btn" onclick="logout()">Logout</button>
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+      <div>
+        <h1><i class="ti ti-coin"></i> Debt Management</h1>
+        <p>Track customer debts, link to projects, manage collections</p>
+      </div>
+      <div style="background: rgba(255,255,255,0.2); padding: 12px 16px; border-radius: 8px; backdrop-filter: blur(10px);">
+        <div style="font-size: 11px; opacity: 0.9; margin-bottom: 6px;">LOGGED IN AS</div>
+        <div style="font-size: 14px; font-weight: 600;" id="currentUser">—</div>
       </div>
     </div>
   </div>
   
-  <div class="content">
-    <!-- TABS -->
-    <div class="tabs">
-      <button class="tab-btn active" onclick="switchTab('dashboard')">📊 Dashboard</button>
-      <button class="tab-btn" onclick="switchTab('upload')">📤 Upload CSV</button>
-      <button class="tab-btn" onclick="switchTab('summary')">📋 Summary</button>
-      <button class="tab-btn" onclick="switchTab('commitments')">📅 Commitments</button>
-      <button class="tab-btn" onclick="switchTab('leaderboard')">🏆 Leaderboard</button>
-    </div>
-    
-    <!-- DASHBOARD -->
-    <div id="tab-dashboard" class="tab-content active">
-      <div class="stats">
-        <div class="stat-card">
-          <div class="stat-icon">💰</div>
-          <div>
-            <div class="stat-value" id="totalOutstanding">₹0</div>
-            <div class="stat-label">Outstanding</div>
-          </div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-icon">📤</div>
-          <div>
-            <div class="stat-value" id="totalAllocated">₹0</div>
-            <div class="stat-label">Allocated</div>
-          </div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-icon">✓</div>
-          <div>
-            <div class="stat-value" id="totalCommitted">₹0</div>
-            <div class="stat-label">Committed</div>
-          </div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-icon">🎯</div>
-          <div>
-            <div class="stat-value" id="totalCollected">₹0</div>
-            <div class="stat-label">Collected</div>
-          </div>
-        </div>
-      </div>
-      <div class="card">
-        <h3 style="margin-bottom: 16px;">Quick Stats</h3>
-        <p style="color: var(--t2);">📊 Upload CSV file to populate dashboard with customer data</p>
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('upload')">📤 Upload CSV</button>
+    <button class="tab-btn" onclick="switchTab('summary')">📊 Summary</button>
+    <button class="tab-btn" onclick="switchTab('linking')">🔗 Link Projects</button>
+    <button class="tab-btn" onclick="switchTab('commitments')">📅 Commitments</button>
+    <button class="tab-btn" onclick="switchTab('leaderboard')">🏆 Leaderboard</button>
+  </div>
+  
+  <!-- Upload Tab -->
+  <div id="upload" class="tab-content active">
+    <div class="card">
+      <h3>📤 Upload Tally CSV</h3>
+      <div style="margin-top: 16px;">
+        <input type="file" id="csvFile" accept=".csv" onchange="handleFileSelect(event)">
+        <button class="btn primary" onclick="parseCSV()" style="margin-left: 10px;">Upload & Parse</button>
       </div>
     </div>
     
-    <!-- UPLOAD CSV -->
-    <div id="tab-upload" class="tab-content">
-      <div class="card">
-        <h3 style="margin-bottom: 16px;">Upload Tally CSV</h3>
-        <div class="input-group">
-          <label>Select CSV File</label>
-          <input type="file" id="csvFile" accept=".csv" onchange="handleCSVUpload(event)">
-          <button class="btn" style="margin-top: 12px;" onclick="parseCSV()">📤 Parse & Upload</button>
+    <div class="card">
+      <table>
+        <thead>
+          <tr>
+            <th>Customer Name</th>
+            <th style="text-align: right;">Opening</th>
+            <th style="text-align: right;">Billed</th>
+            <th style="text-align: right;">Collected</th>
+            <th style="text-align: right;">Outstanding</th>
+          </tr>
+        </thead>
+        <tbody id="csvPreview">
+          <tr><td colspan="5" style="text-align: center; color: var(--t2);">Upload a CSV file to see preview</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  
+  <!-- Summary Tab -->
+  <div id="summary" class="tab-content">
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-icon">💰</div>
+        <div>
+          <div class="stat-value" id="statOutstanding">₹0</div>
+          <div class="stat-label">Outstanding</div>
         </div>
       </div>
-      <div class="card">
-        <h3 style="margin-bottom: 16px;">Preview</h3>
-        <div class="table-wrap">
-          <table id="previewTable" style="display: none;">
-            <thead>
-              <tr>
-                <th>Customer</th>
-                <th style="text-align: right;">Opening</th>
-                <th style="text-align: right;">Billed</th>
-                <th style="text-align: right;">Collected</th>
-                <th style="text-align: right;">Outstanding</th>
-              </tr>
-            </thead>
-            <tbody id="previewBody"></tbody>
-          </table>
-          <p id="noPreview" style="padding: 40px; text-align: center; color: var(--t2);">
-            Upload a CSV file to see preview
-          </p>
+      <div class="stat">
+        <div class="stat-icon">🔗</div>
+        <div>
+          <div class="stat-value" id="statAllocated">₹0</div>
+          <div class="stat-label">Allocated</div>
+        </div>
+      </div>
+      <div class="stat">
+        <div class="stat-icon">📅</div>
+        <div>
+          <div class="stat-value" id="statCommitted">₹0</div>
+          <div class="stat-label">Committed</div>
+        </div>
+      </div>
+      <div class="stat">
+        <div class="stat-icon">✓</div>
+        <div>
+          <div class="stat-value" id="statCollected">₹0</div>
+          <div class="stat-label">Collected</div>
         </div>
       </div>
     </div>
     
-    <!-- SUMMARY -->
-    <div id="tab-summary" class="tab-content">
-      <div class="card">
-        <h3 style="margin-bottom: 16px;">Customer Summary</h3>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Customer</th>
-                <th style="text-align: right;">Outstanding</th>
-                <th style="text-align: right;">Allocated</th>
-                <th style="text-align: right;">Committed</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody id="summaryBody">
-              <tr>
-                <td colspan="5" style="text-align: center; color: var(--t2); padding: 40px;">
-                  Upload CSV to populate data
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
+    <div class="card">
+      <table>
+        <thead>
+          <tr>
+            <th>Customer</th>
+            <th style="text-align: right;">Outstanding</th>
+            <th style="text-align: right;">Allocated</th>
+            <th style="text-align: right;">Committed</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="summaryTable">
+          <tr><td colspan="5" style="text-align: center; color: var(--t2);">No data yet</td></tr>
+        </tbody>
+      </table>
     </div>
-    
-    <!-- COMMITMENTS -->
-    <div id="tab-commitments" class="tab-content">
-      <div class="card">
-        <h3 style="margin-bottom: 16px;">Team Commitments</h3>
-        <button class="btn" style="margin-bottom: 16px;" onclick="addCommitment()">➕ Add Commitment</button>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Customer</th>
-                <th style="text-align: right;">Amount</th>
-                <th>Assigned To</th>
-                <th>Date</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody id="commitmentsBody">
-              <tr>
-                <td colspan="5" style="text-align: center; color: var(--t2); padding: 40px;">
-                  No commitments yet
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
+  </div>
+  
+  <!-- Linking Tab -->
+  <div id="linking" class="tab-content">
+    <div class="card">
+      <table>
+        <thead>
+          <tr>
+            <th>Customer</th>
+            <th style="text-align: right;">Outstanding</th>
+            <th style="text-align: right;">Allocated</th>
+            <th style="text-align: right;">Unallocated</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="linkingTable">
+          <tr><td colspan="6" style="text-align: center; color: var(--t2);">Upload CSV first</td></tr>
+        </tbody>
+      </table>
     </div>
-    
-    <!-- LEADERBOARD -->
-    <div id="tab-leaderboard" class="tab-content">
-      <div class="card">
-        <h3 style="margin-bottom: 16px;">Team Performance</h3>
-        <div id="leaderboardContent" style="padding: 40px; text-align: center; color: var(--t2);">
-          No commitments yet. Create commitments to see performance.
-        </div>
+  </div>
+  
+  <!-- Commitments Tab -->
+  <div id="commitments" class="tab-content">
+    <div class="card">
+      <table>
+        <thead>
+          <tr>
+            <th>Customer</th>
+            <th>Project</th>
+            <th>PO</th>
+            <th style="text-align: right;">Amount</th>
+            <th>Assigned</th>
+            <th>Date</th>
+            <th style="text-align: center;">Collected</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="commitmentsTable">
+          <tr><td colspan="9" style="text-align: center; color: var(--t2);">No commitments yet</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  
+  <!-- Leaderboard Tab -->
+  <div id="leaderboard" class="tab-content">
+    <div id="leaderboardContent">
+      <div class="empty">
+        <div class="empty-icon">🏆</div>
+        <div style="font-weight: 600; margin-bottom: 5px;">No commitments yet</div>
+        <div style="font-size: 12px;">Create commitments to see team performance</div>
       </div>
     </div>
   </div>
 </div>
 
+<!-- Link Modal -->
+<div id="linkModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">Link Customer to Projects</div>
+    
+    <div class="form-group">
+      <label>Customer</label>
+      <input type="text" id="modalCustomer" readonly>
+    </div>
+    
+    <div class="form-group">
+      <label>Outstanding</label>
+      <input type="text" id="modalOutstanding" readonly>
+    </div>
+    
+    <div class="form-group">
+      <label>Remaining to Allocate</label>
+      <input type="text" id="modalRemaining" readonly>
+    </div>
+    
+    <hr style="margin: 16px 0; border: none; border-top: 0.5px solid var(--bd);">
+    
+    <div class="form-group">
+      <label>Project Name *</label>
+      <select id="projectSelect" onchange="loadPOs()">
+        <option value="">-- Select Project --</option>
+      </select>
+    </div>
+    
+    <div class="form-group">
+      <label>PO Number *</label>
+      <select id="poSelect">
+        <option value="">-- Select PO --</option>
+      </select>
+      <input type="text" id="poManual" placeholder="Or type PO manually" style="margin-top: 6px; display: none;">
+    </div>
+    
+    <div class="form-group">
+      <label>Amount to Allocate *</label>
+      <input type="number" id="allocationAmount" placeholder="0" min="0" step="0.01">
+    </div>
+    
+    <button class="btn primary" onclick="addAllocation()" style="width: 100%; margin-bottom: 12px;">+ Add Allocation</button>
+    
+    <div style="background: #f9f9f9; border-radius: 7px; padding: 12px; margin-bottom: 12px; max-height: 200px; overflow-y: auto;">
+      <div style="font-size: 11px; font-weight: 600; margin-bottom: 8px;">CURRENT ALLOCATIONS:</div>
+      <div id="allocationsList">
+        <div style="color: var(--t2); text-align: center; font-size: 11px;">No allocations yet</div>
+      </div>
+    </div>
+    
+    <div style="display: flex; gap: 8px;">
+      <button class="btn" onclick="closeModal('linkModal')" style="flex: 1;">Cancel</button>
+      <button class="btn primary" onclick="saveAllocations()" style="flex: 1;">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Commitment Modal -->
+<div id="commitmentModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">Set Collection Commitment</div>
+    
+    <div class="form-group">
+      <label>Customer</label>
+      <input type="text" id="commitCustomer" readonly>
+    </div>
+    
+    <div class="form-group">
+      <label>Project</label>
+      <input type="text" id="commitProject" readonly>
+    </div>
+    
+    <div class="form-group">
+      <label>PO</label>
+      <input type="text" id="commitPO" readonly>
+    </div>
+    
+    <div class="form-group">
+      <label>Amount</label>
+      <input type="text" id="commitAmount" readonly>
+    </div>
+    
+    <hr style="margin: 16px 0; border: none; border-top: 0.5px solid var(--bd);">
+    
+    <div class="form-group">
+      <label>Assigned To *</label>
+      <select id="assignedTo">
+        <option value="">-- Select User --</option>
+        <option value="Ravi">Ravi - Field Collections</option>
+        <option value="Jawed">Jawed - Follow-up</option>
+        <option value="Chetan">Chetan - Sales</option>
+        <option value="Keshav">Keshav - Admin</option>
+      </select>
+    </div>
+    
+    <div class="form-group">
+      <label>Commitment Date *</label>
+      <input type="date" id="commitDate">
+    </div>
+    
+    <div class="form-group" style="background: #E4F1FA; padding: 12px; border-radius: 4px; margin-bottom: 15px;">
+      <div style="font-size: 11px; color: var(--t2); margin-bottom: 6px;">ℹ️ Committed Amount</div>
+      <div style="font-size: 18px; font-weight: 600; color: var(--p);">₹<span id="commitAmountDisplay">0</span></div>
+      <div style="font-size: 10px; color: var(--t2); margin-top: 4px;">Enter collection details after receiving payment</div>
+    </div>
+    
+    <div style="display: flex; gap: 8px;">
+      <button class="btn" onclick="closeModal('commitmentModal')" style="flex: 1;">Cancel</button>
+      <button class="btn primary" onclick="saveCommitment()" style="flex: 1;">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ RECORD COLLECTION MODAL ══ -->
+<div id="collectionModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <div class="modal-title">Record Collection</div>
+      <button class="modal-close" onclick="closeModal('collectionModal')">✕</button>
+    </div>
+    <div style="padding: 15px; border-bottom: 1px solid var(--b); background: var(--pl); margin-bottom: 15px;">
+      <div style="font-size: 10px; color: var(--t2); margin-bottom: 4px;">CUSTOMER</div>
+      <div style="font-size: 16px; font-weight: 600;" id="colCustomer">—</div>
+      <div style="font-size: 10px; color: var(--t2); margin-top: 8px; margin-bottom: 4px;">COMMITTED AMOUNT</div>
+      <div style="font-size: 14px; font-weight: 600; color: var(--p);">₹<span id="colAmount">0</span></div>
+    </div>
+    
+    <div class="form-group">
+      <label>Amount Collected (₹) *</label>
+      <input type="number" id="collectedAmountInput" placeholder="0" min="0" step="0.01">
+    </div>
+    
+    <div class="form-group">
+      <label>Collection Date *</label>
+      <input type="date" id="collectionDateInput" required>
+    </div>
+    
+    <div style="display: flex; gap: 8px;">
+      <button class="btn" onclick="closeModal('collectionModal')" style="flex: 1;">Cancel</button>
+      <button class="btn primary" onclick="saveCollection()" style="flex: 1;">✓ Record</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ LOGIN SCREEN (Shows when not authenticated) ══ -->
+<div id="loginScreen" style="display: none; position: fixed; inset: 0; background: linear-gradient(135deg, #006994, #004A68); z-index: 2000; display: flex; align-items: center; justify-content: center;">
+  <div style="background: #fff; border-radius: 12px; padding: 40px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); max-width: 400px; width: 90%;">
+    <div style="text-align: center; margin-bottom: 30px;">
+      <div style="font-size: 48px; margin-bottom: 16px;">💰</div>
+      <h1 style="font-size: 24px; font-weight: 600; color: #006994; margin-bottom: 8px;">Debt Management</h1>
+      <p style="color: #666; font-size: 14px;">Track collections • Manage commitments • Monitor performance</p>
+    </div>
+    
+    <div class="form-group">
+      <label style="display: block; font-size: 12px; font-weight: 600; color: #333; margin-bottom: 8px; text-transform: uppercase;">Email</label>
+      <input type="email" id="loginEmail" placeholder="your@email.com" style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
+    </div>
+    
+    <div class="form-group">
+      <label style="display: block; font-size: 12px; font-weight: 600; color: #333; margin-bottom: 8px; text-transform: uppercase;">Password</label>
+      <input type="password" id="loginPassword" placeholder="••••••••" style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
+    </div>
+    
+    <button class="btn primary" onclick="handleLogin()" style="width: 100%; padding: 12px; margin-bottom: 12px; background: linear-gradient(135deg, #006994, #004A68); border: none; color: #fff; font-weight: 600; cursor: pointer; border-radius: 8px;">
+      Sign In
+    </button>
+    
+    <div id="loginError" style="display: none; background: #FFEBEE; color: #C00; padding: 12px; border-radius: 6px; font-size: 12px; margin-bottom: 12px; text-align: center;"></div>
+    
+    <div style="text-align: center; font-size: 12px; color: #999;">
+      Use your Wiki login credentials
+    </div>
+  </div>
+</div>
+
+<!-- ══ NOTIFICATION BADGE ══ -->
+<div id="notificationBadge" style="display: none; position: fixed; top: 20px; right: 20px; z-index: 999;">
+  <div style="background: #FF5252; color: #fff; padding: 12px 16px; border-radius: 8px; box-shadow: 0 4px 12px rgba(255,82,82,0.3); cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 8px;" onclick="openNotificationModal()">
+    <span style="width: 8px; height: 8px; background: #FFD700; border-radius: 50%; animation: pulse 2s infinite;"></span>
+    <span id="notificationText">Action Required</span>
+    <i class="ti ti-bell" style="font-size: 16px;"></i>
+  </div>
+</div>
+
+<!-- ══ CSV UPLOAD REMINDER (Dev Only) ══ -->
+<div id="csvUploadModal" class="modal">
+  <div class="modal-content" style="max-width: 500px;">
+    <div class="modal-header" style="background: linear-gradient(135deg, #FF6B6B, #FF5252); color: #fff; margin: -20px -20px 20px -20px; padding: 20px; border-radius: 10px 10px 0 0;">
+      <i class="ti ti-alert-triangle" style="font-size: 20px; margin-right: 10px;"></i>
+      Monday CSV Upload Reminder
+    </div>
+    
+    <div style="padding: 20px;">
+      <div style="background: #FFF3E0; border-left: 4px solid #FF6B6B; padding: 12px; border-radius: 4px; margin-bottom: 16px;">
+        <div style="font-weight: 600; color: #E65100;">⏰ Time to Update Data</div>
+        <div style="font-size: 12px; color: var(--t2); margin-top: 4px;">It's Monday morning! Please upload the latest Tally CSV.</div>
+      </div>
+      
+      <div style="background: #f5f5f5; padding: 12px; border-radius: 4px; margin-bottom: 16px;">
+        <div style="font-size: 11px; font-weight: 600; color: var(--t2); text-transform: uppercase; margin-bottom: 8px;">📋 Instructions</div>
+        <div style="font-size: 12px; line-height: 1.6;">
+          1. Export latest AR data from Tally<br>
+          2. Go to "Upload CSV" tab<br>
+          3. Select file and upload<br>
+          4. All team members will be notified
+        </div>
+      </div>
+      
+      <div style="background: #E4F1FA; padding: 12px; border-radius: 4px; margin-bottom: 16px;">
+        <div style="font-size: 11px; font-weight: 600; color: var(--p); margin-bottom: 4px;">📊 Last Uploaded</div>
+        <div style="font-size: 13px; font-weight: 600;" id="lastUploadTime">Never</div>
+      </div>
+      
+      <div style="display: flex; gap: 8px;">
+        <button class="btn" onclick="closeModal('csvUploadModal')" style="flex: 1;">Remind Later</button>
+        <button class="btn primary" onclick="goToUploadTab()" style="flex: 1; background: linear-gradient(135deg, #FF6B6B, #FF5252); border: none;">
+          <i class="ti ti-upload"></i> Go to Upload
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ COMMITMENT ENTRY REMINDER (Team Members) ══ -->
+<div id="commitmentReminderModal" class="modal">
+  <div class="modal-content" style="max-width: 500px;">
+    <div class="modal-header" style="background: linear-gradient(135deg, #4CAF50, #45a049); color: #fff; margin: -20px -20px 20px -20px; padding: 20px; border-radius: 10px 10px 0 0;">
+      <i class="ti ti-checklist" style="font-size: 20px; margin-right: 10px;"></i>
+      New Data Available - Enter Your Commitments
+    </div>
+    
+    <div style="padding: 20px;">
+      <div style="background: #E8F5E9; border-left: 4px solid #4CAF50; padding: 12px; border-radius: 4px; margin-bottom: 16px;">
+        <div style="font-weight: 600; color: #2E7D32;">✓ CSV Updated</div>
+        <div style="font-size: 12px; color: var(--t2); margin-top: 4px;">Dev has uploaded the latest customer data. Please review and enter your collection commitments.</div>
+      </div>
+      
+      <div style="background: #f5f5f5; padding: 12px; border-radius: 4px; margin-bottom: 16px;">
+        <div style="font-size: 11px; font-weight: 600; color: var(--t2); text-transform: uppercase; margin-bottom: 8px;">📋 Your Tasks</div>
+        <div style="font-size: 12px; line-height: 1.6;">
+          1. Review "Summary" tab for new customers<br>
+          2. Allocate to projects if needed<br>
+          3. Set your collection commitments<br>
+          4. Enter collected amounts as you collect
+        </div>
+      </div>
+      
+      <div style="background: #E4F1FA; padding: 12px; border-radius: 4px; margin-bottom: 16px;">
+        <div style="font-size: 11px; font-weight: 600; color: var(--p); margin-bottom: 4px;">🔔 Uploaded At</div>
+        <div style="font-size: 13px; font-weight: 600;" id="uploadNotifyTime">—</div>
+      </div>
+      
+      <div style="display: flex; gap: 8px;">
+        <button class="btn" onclick="closeModal('commitmentReminderModal')" style="flex: 1;">Later</button>
+        <button class="btn primary" onclick="goToSummaryTab()" style="flex: 1;">
+          <i class="ti ti-arrow-right"></i> Go to Summary
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+</style>
+
 <script>
-// ═══════════════════════════════════════════════════════════════════════════
-// USERS & CONFIG
-// ═══════════════════════════════════════════════════════════════════════════
-
-const USERS = {
-  'updesh': { name: 'Updesh', role: 'Admin/CEO', password: 'updesh123' },
-  'pratim': { name: 'Pratim', role: 'Technical Admin', password: 'pratim123' },
-  'dev': { name: 'Dev', role: 'CSV Upload', password: 'dev123' },
-  'ravi': { name: 'Ravi', role: 'Collections', password: 'ravi123' },
-  'jawed': { name: 'Jawed', role: 'Follow-up', password: 'jawed123' },
-  'chetan': { name: 'Chetan', role: 'Sales', password: 'chetan123' },
-  'keshav': { name: 'Keshav', role: 'Admin', password: 'keshav123' }
-};
-
-const USER_EMAILS = {
-  'updesh@dqap.in': 'updesh',
-  'pratim@dqap.in': 'pratim',
-  'dev@dqap.in': 'dev',
-  'ravi@dqap.in': 'ravi',
-  'jawed@dqap.in': 'jawed',
-  'chetan@dqap.in': 'chetan',
-  'keshav@dqap.in': 'keshav'
-};
-
-// ═══════════════════════════════════════════════════════════════════════════
-// FIREBASE
-// ═══════════════════════════════════════════════════════════════════════════
-
+// Firebase Configuration
 firebase.initializeApp({
   apiKey: "AIzaSyBV2ZQwfqvgPyzLz75wsSIg9N5gjPHY-R8",
   authDomain: "dqap-wiki.firebaseapp.com",
@@ -643,319 +838,1084 @@ firebase.initializeApp({
 
 const db = firebase.firestore();
 
-// ═══════════════════════════════════════════════════════════════════════════
-// STATE
-// ═══════════════════════════════════════════════════════════════════════════
-
+// Current User State
 let currentUser = null;
 let currentUserRole = null;
-let csvData = [];
-let commitmentsData = [];
+let currentUserData = null;
+let wikiSession = null;
 
-// ═══════════════════════════════════════════════════════════════════════════
-// INIT
-// ═══════════════════════════════════════════════════════════════════════════
-
-window.addEventListener('load', () => {
-  displayCredentialsHint();
-  const saved = localStorage.getItem('debt_user');
-  if (saved) {
+// ══ WIKI-INTEGRATED AUTHENTICATION ══
+// Check for Wiki session or fallback to standalone mode
+function initializeAuth() {
+  // Check for Wiki session (from shared sessionStorage)
+  const sess = sessionStorage.getItem('dqap_sess');
+  
+  if (sess) {
+    // User logged in via Wiki
     try {
-      const user = JSON.parse(saved);
-      currentUser = user.username;
-      currentUserRole = user.role;
-      showMainScreen();
-      loadFromFirestore();
-      return;
-    } catch (e) { localStorage.removeItem('debt_user'); }
+      wikiSession = JSON.parse(sess);
+      autoLoginFromWiki(wikiSession);
+    } catch (e) {
+      console.error('❌ Wiki session parse error:', e);
+      showLoginScreen();
+    }
+  } else {
+    // Standalone mode - check localStorage
+    const savedUser = localStorage.getItem('debt_standalone_user');
+    if (savedUser) {
+      autoLoginStandalone(savedUser);
+    } else {
+      showLoginScreen();
+    }
   }
-  showLoginScreen();
-});
-
-// ═══════════════════════════════════════════════════════════════════════════
-// LOGIN
-// ═══════════════════════════════════════════════════════════════════════════
-
-function handleLogin(event) {
-  event.preventDefault();
-  const email = document.getElementById('email').value.toLowerCase().trim();
-  const password = document.getElementById('password').value;
-  const error = document.getElementById('loginError');
-  error.style.display = 'none';
-  
-  let username = email in USERS ? email : USER_EMAILS[email];
-  if (!username) {
-    error.textContent = 'User not found';
-    error.style.display = 'block';
-    return;
-  }
-  
-  if (password !== USERS[username].password) {
-    error.textContent = 'Invalid password';
-    error.style.display = 'block';
-    return;
-  }
-  
-  currentUser = username;
-  currentUserRole = USERS[username].role;
-  localStorage.setItem('debt_user', JSON.stringify({
-    username: username,
-    name: USERS[username].name,
-    role: USERS[username].role,
-    loginTime: new Date().toISOString()
-  }));
-  
-  showMainScreen();
-  loadFromFirestore();
 }
 
+// Auto-login from Wiki credentials
+async function autoLoginFromWiki(session) {
+  try {
+    const username = session.username;
+    const displayName = session.displayName || username;
+    
+    // Get user data from dqap_users collection
+    const userDoc = await db.collection('dqap_users').doc(username).get();
+    
+    if (userDoc.exists) {
+      const userData = userDoc.data();
+      currentUser = username;
+      currentUserRole = userData.role || 'user';
+      currentUserData = {
+        ...userData,
+        displayName: userData.displayName || displayName,
+        name: userData.displayName || displayName
+      };
+      
+      // Show app
+      document.getElementById('loginScreen').style.display = 'none';
+      document.getElementById('appContainer').style.display = 'block';
+      
+      // Update UI
+      updateUserInfo();
+      
+      // Load data
+      loadFromLocalStorage();
+      updateAllTabs();
+      loadProjects();
+      
+      // Check notifications
+      setTimeout(checkNotifications, 500);
+      
+      showToast(`👋 Welcome, ${displayName}!`, 'success');
+      
+      console.log('✅ Auto-logged in from Wiki:', username, '| Role:', currentUserRole);
+    } else {
+      console.warn('⚠️ User not found in dqap_users:', username);
+      showLoginError(`User "${username}" not found in system. Contact admin to add you.`);
+      showLoginScreen();
+    }
+  } catch (error) {
+    console.error('❌ Auto-login error:', error);
+    showLoginError('Error: ' + error.message);
+    showLoginScreen();
+  }
+}
+
+// Fallback for standalone mode (when not using Wiki)
+function autoLoginStandalone(username) {
+  currentUser = username;
+  currentUserRole = getUserRoleByName(username);
+  currentUserData = {
+    displayName: username,
+    name: username,
+    role: currentUserRole
+  };
+  
+  // Show app
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appContainer').style.display = 'block';
+  
+  // Update UI
+  updateUserInfo();
+  
+  // Load data
+  loadFromLocalStorage();
+  updateAllTabs();
+  loadProjects();
+  
+  // Check notifications
+  setTimeout(checkNotifications, 500);
+  
+  showToast(`👋 Welcome, ${username}!`, 'success');
+  
+  console.log('✅ Auto-logged in (standalone):', username);
+}
+
+function getUserRoleByName(userName) {
+  const roles = {
+    'Pratim': 'admin',
+    'Updesh': 'admin',
+    'Dev': 'developer',
+    'Ravi': 'user',
+    'Jawed': 'user',
+    'Chetan': 'user',
+    'Keshav': 'user'
+  };
+  return roles[userName] || 'user';
+}
+
+// Show login screen
 function showLoginScreen() {
   document.getElementById('loginScreen').style.display = 'flex';
-  document.getElementById('mainScreen').style.display = 'none';
+  document.getElementById('appContainer').style.display = 'none';
 }
 
-function showMainScreen() {
-  const user = USERS[currentUser];
-  document.getElementById('userName').textContent = user.name;
-  document.getElementById('userRole').textContent = `(${user.role})`;
-  document.getElementById('loginScreen').style.display = 'none';
-  document.getElementById('mainScreen').style.display = 'block';
-}
-
-function logout() {
-  localStorage.removeItem('debt_user');
+// Logout - clear session and return to login
+function logoutUser() {
   currentUser = null;
+  currentUserRole = null;
+  currentUserData = null;
+  wikiSession = null;
+  localStorage.removeItem('debt_standalone_user');
+  
+  // Clear data
+  localStorage.removeItem('debt_csv');
+  localStorage.removeItem('debt_allocations');
+  localStorage.removeItem('debt_commitments');
+  localStorage.removeItem('debt_lastUploadTime');
+  
   showLoginScreen();
+  showToast('👋 Logged out', 'info');
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// TABS
-// ═══════════════════════════════════════════════════════════════════════════
+// Manual standalone login (fallback UI in login screen)
+function standaloneLogin(username) {
+  localStorage.setItem('debt_standalone_user', username);
+  autoLoginStandalone(username);
+}
+});
 
-function switchTab(tab) {
+// Global Data
+let csvData = [];
+let allocationsData = [];
+let commitmentsData = [];
+let projectsData = [];
+let currentCustomer = null;
+let tempAllocations = [];
+let currentAllocationId = null;
+let csvFile = null;
+
+// Tab Switching
+function switchTab(tabName) {
   document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-  document.getElementById('tab-' + tab).classList.add('active');
+  
+  document.getElementById(tabName).classList.add('active');
   event.target.classList.add('active');
   
-  if (tab === 'dashboard') updateDashboard();
-  else if (tab === 'summary') updateSummary();
-  else if (tab === 'commitments') updateCommitments();
-  else if (tab === 'leaderboard') updateLeaderboard();
+  updateAllTabs();
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// CSV
-// ═══════════════════════════════════════════════════════════════════════════
-
-function handleCSVUpload(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = (e) => parseCSVContent(e.target.result);
-  reader.readAsText(file);
-}
-
-function parseCSVContent(csv) {
-  csvData = [];
-  csv.split('\n').forEach((line, i) => {
-    if (i === 0 || !line.trim()) return;
-    const parts = line.split(',');
-    if (parts.length >= 5) {
-      csvData.push({
-        customer: parts[0].trim(),
-        opening: parseNum(parts[1]),
-        billed: parseNum(parts[2]),
-        collected: parseNum(parts[3]),
-        outstanding: parseNum(parts[4])
-      });
-    }
-  });
-  updatePreview();
-  toast('CSV parsed! ' + csvData.length + ' customers found');
+// CSV Handling
+function handleFileSelect(e) {
+  csvFile = e.target.files[0];
 }
 
 function parseCSV() {
-  if (csvData.length === 0) {
-    alert('Upload a CSV first');
+  if (!csvFile) {
+    showToast('Please select a CSV file', 'error');
     return;
   }
-  saveToFirestore();
-  updateDashboard();
-  toast('Data saved to Firestore');
-}
-
-function parseNum(str) {
-  return parseFloat((str || '0').toString().replace(/,/g, '')) || 0;
-}
-
-function updatePreview() {
-  const tbody = document.getElementById('previewBody');
-  tbody.innerHTML = '';
-  csvData.slice(0, 10).forEach(row => {
-    tbody.innerHTML += `
-      <tr>
-        <td>${row.customer}</td>
-        <td style="text-align: right;">₹${row.opening.toLocaleString('en-IN')}</td>
-        <td style="text-align: right;">₹${row.billed.toLocaleString('en-IN')}</td>
-        <td style="text-align: right;">₹${row.collected.toLocaleString('en-IN')}</td>
-        <td style="text-align: right;">₹${row.outstanding.toLocaleString('en-IN')}</td>
-      </tr>
-    `;
-  });
-  document.getElementById('previewTable').style.display = csvData.length > 0 ? 'table' : 'none';
-  document.getElementById('noPreview').style.display = csvData.length > 0 ? 'none' : 'block';
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// DASHBOARD
-// ═══════════════════════════════════════════════════════════════════════════
-
-function updateDashboard() {
-  const outstanding = csvData.reduce((s, r) => s + r.outstanding, 0);
-  const collected = csvData.reduce((s, r) => s + r.collected, 0);
-  const committed = commitmentsData.reduce((s, r) => s + r.amount, 0);
   
-  document.getElementById('totalOutstanding').textContent = '₹' + outstanding.toLocaleString('en-IN');
-  document.getElementById('totalCollected').textContent = '₹' + collected.toLocaleString('en-IN');
-  document.getElementById('totalCommitted').textContent = '₹' + committed.toLocaleString('en-IN');
-  document.getElementById('totalAllocated').textContent = '₹0';
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const lines = e.target.result.split('\n');
+    csvData = [];
+    
+    for (let i = 14; i < lines.length; i++) {
+      const cells = parseCSVLine(lines[i]);
+      if (cells.length < 5) continue;
+      
+      const customer = cells[0].trim();
+      
+      // Skip invalid/summary rows
+      if (!customer || customer.length < 2) continue;
+      if (!/[a-zA-Z]/.test(customer)) continue;
+      if (customer.toUpperCase().includes('TOTAL') || customer.toUpperCase().includes('GRAND')) continue;
+      if (customer.match(/^[,\s]+$/)) continue;
+      
+      const outstanding = parseIndianNumber(cells[4]);
+      if (outstanding <= 0) continue;
+      
+      csvData.push({
+        customerName: customer,
+        opening: parseIndianNumber(cells[1]),
+        billed: parseIndianNumber(cells[2]),
+        collected: parseIndianNumber(cells[3]),
+        outstanding: outstanding
+      });
+    }
+    
+    csvData.sort((a, b) => b.outstanding - a.outstanding);
+    saveToLocalStorage();
+    updateAllTabs();
+    showToast(`✅ Loaded ${csvData.length} customers`, 'success');
+  };
+  reader.readAsText(csvFile);
+}
+
+function parseCSVLine(line) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+  
+  for (let i = 0; i < line.length; i++) {
+    if (line[i] === '"') inQuotes = !inQuotes;
+    else if (line[i] === ',' && !inQuotes) {
+      result.push(current);
+      current = '';
+    } else {
+      current += line[i];
+    }
+  }
+  result.push(current);
+  return result;
+}
+
+function parseIndianNumber(str) {
+  return parseFloat((str || '').replace(/[₹,]/g, '')) || 0;
+}
+
+// Update Functions
+function updateAllTabs() {
+  updateCSVPreview();
+  updateSummary();
+  updateLinking();
+  updateCommitments();
+  updateLeaderboard();
+}
+
+function updateCSVPreview() {
+  const tbody = document.getElementById('csvPreview');
+  if (csvData.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--t2);">Upload a CSV file to see preview</td></tr>';
+    return;
+  }
+  
+  tbody.innerHTML = csvData.map(row => `
+    <tr>
+      <td><strong>${row.customerName}</strong></td>
+      <td style="text-align: right;">₹${row.opening.toLocaleString('en-IN')}</td>
+      <td style="text-align: right;">₹${row.billed.toLocaleString('en-IN')}</td>
+      <td style="text-align: right;">₹${row.collected.toLocaleString('en-IN')}</td>
+      <td style="text-align: right;">₹${row.outstanding.toLocaleString('en-IN')}</td>
+    </tr>
+  `).join('');
 }
 
 function updateSummary() {
-  const tbody = document.getElementById('summaryBody');
-  tbody.innerHTML = '';
-  if (csvData.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--t2); padding: 40px;">No data</td></tr>';
-    return;
-  }
-  csvData.forEach(row => {
-    tbody.innerHTML += `
+  if (csvData.length === 0) return;
+  
+  const totalOut = csvData.reduce((s, r) => s + r.outstanding, 0);
+  const totalAlloc = allocationsData.reduce((s, a) => s + (a.amount || 0), 0);
+  const totalCommit = commitmentsData.reduce((s, c) => s + (c.amount || 0), 0);
+  const totalCollect = commitmentsData.reduce((s, c) => s + (c.collected || 0), 0);
+  
+  document.getElementById('statOutstanding').textContent = `₹${totalOut.toLocaleString('en-IN')}`;
+  document.getElementById('statAllocated').textContent = `₹${totalAlloc.toLocaleString('en-IN')}`;
+  document.getElementById('statCommitted').textContent = `₹${totalCommit.toLocaleString('en-IN')}`;
+  document.getElementById('statCollected').textContent = `₹${totalCollect.toLocaleString('en-IN')}`;
+  
+  const tbody = document.getElementById('summaryTable');
+  tbody.innerHTML = csvData.map(customer => {
+    const allocated = allocationsData.filter(a => a.customer === customer.customerName).reduce((s, a) => s + a.amount, 0);
+    const commitments = commitmentsData.filter(c => c.customer === customer.customerName);
+    const committed = commitments.reduce((s, c) => s + c.amount, 0);
+    const collected = commitments.reduce((s, c) => s + (c.collected || 0), 0);
+    
+    // Status based on actual collection progress and dates
+    let status = 'pending';
+    let statusText = 'Pending';
+    const today = new Date().toISOString().split('T')[0];
+    
+    if (committed > 0) {
+      if (collected >= committed) {
+        status = 'success';
+        statusText = '✓ Collected';
+      } else if (collected > 0) {
+        status = 'warning';
+        statusText = `Partial (₹${collected.toLocaleString('en-IN')})`;
+      } else {
+        // Check if delayed
+        const latestCommitDate = Math.max(...commitments.map(c => new Date(c.commitDate).getTime()));
+        const isDelayed = today > commitments[0].commitDate;
+        
+        if (isDelayed) {
+          status = 'error';
+          statusText = '⚠️ Delayed';
+        } else {
+          status = 'pending';
+          statusText = 'Committed';
+        }
+      }
+    } else if (allocated > 0) {
+      status = 'warning';
+      statusText = 'Allocated';
+    }
+    
+    return `
       <tr>
-        <td>${row.customer}</td>
-        <td style="text-align: right;">₹${row.outstanding.toLocaleString('en-IN')}</td>
-        <td style="text-align: right;">₹0</td>
-        <td style="text-align: right;">₹0</td>
-        <td>Pending</td>
+        <td><strong>${customer.customerName}</strong></td>
+        <td style="text-align: right;">₹${customer.outstanding.toLocaleString('en-IN')}</td>
+        <td style="text-align: right;">₹${allocated.toLocaleString('en-IN')}</td>
+        <td style="text-align: right;">₹${committed.toLocaleString('en-IN')}</td>
+        <td><span class="badge ${status}">${statusText}</span></td>
       </tr>
     `;
-  });
+  }).join('');
+}
+
+function updateLinking() {
+  const tbody = document.getElementById('linkingTable');
+  if (csvData.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--t2);">Upload CSV first</td></tr>';
+    return;
+  }
+  
+  tbody.innerHTML = csvData.map(customer => {
+    const allocated = allocationsData.filter(a => a.customer === customer.customerName).reduce((s, a) => s + a.amount, 0);
+    const unallocated = customer.outstanding - allocated;
+    const status = unallocated === 0 ? 'success' : (allocated > 0 ? 'warning' : 'pending');
+    const statusText = unallocated === 0 ? 'Complete' : (allocated > 0 ? 'Partial' : 'Pending');
+    
+    return `
+      <tr>
+        <td><strong>${customer.customerName}</strong></td>
+        <td style="text-align: right;">₹${customer.outstanding.toLocaleString('en-IN')}</td>
+        <td style="text-align: right;">₹${allocated.toLocaleString('en-IN')}</td>
+        <td style="text-align: right;">₹${unallocated.toLocaleString('en-IN')}</td>
+        <td><span class="badge ${status}">${statusText}</span></td>
+        <td><button class="btn sm primary" onclick="openLinkModal('${customer.customerName}')">Link</button></td>
+      </tr>
+    `;
+  }).join('');
 }
 
 function updateCommitments() {
-  const tbody = document.getElementById('commitmentsBody');
-  tbody.innerHTML = '';
-  if (commitmentsData.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--t2); padding: 40px;">No commitments</td></tr>';
+  const tbody = document.getElementById('commitmentsTable');
+  if (allocationsData.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: var(--t2);">No allocations yet</td></tr>';
     return;
   }
-  commitmentsData.forEach(c => {
-    tbody.innerHTML += `
+  
+  tbody.innerHTML = allocationsData.map(alloc => {
+    const commit = commitmentsData.find(c => c.allocationId === alloc.id);
+    
+    let status = 'pending';
+    let statusText = 'Pending';
+    
+    if (commit) {
+      const today = new Date().toISOString().split('T')[0];
+      if (commit.collected >= commit.amount) {
+        status = 'success';
+        statusText = '✓ Collected';
+      } else if (commit.collected > 0) {
+        status = 'warning';
+        statusText = `Partial`;
+      } else if (today > commit.commitDate) {
+        status = 'error';
+        statusText = '⚠️ Delayed';
+      } else {
+        status = 'success';
+        statusText = 'Committed';
+      }
+    }
+    
+    const assigned = commit ? commit.assignedTo : '-';
+    const commitDate = commit ? new Date(commit.commitDate).toLocaleDateString('en-IN') : '-';
+    const collected = commit ? `₹${commit.collected.toLocaleString('en-IN')}` : '-';
+    
+    return `
       <tr>
-        <td>${c.customer}</td>
-        <td>₹${c.amount.toLocaleString('en-IN')}</td>
-        <td>${c.assignedTo}</td>
-        <td>${c.date}</td>
-        <td><span style="background: var(--pl); padding: 4px 8px; border-radius: 4px;">Committed</span></td>
+        <td><strong>${alloc.customer}</strong></td>
+        <td>${alloc.project}</td>
+        <td>${alloc.po}</td>
+        <td style="text-align: right;">₹${alloc.amount.toLocaleString('en-IN')}</td>
+        <td>${assigned}</td>
+        <td>${commitDate}</td>
+        <td style="text-align: center;">${collected}</td>
+        <td><span class="badge ${status}">${statusText}</span></td>
+        <td style="white-space: nowrap;">
+          <button class="btn sm" onclick="openCommitmentModal('${alloc.id}')" style="margin-right: 4px;">${commit ? 'Edit' : 'Set'}</button>
+          ${commit ? `<button class="btn sm primary" onclick="openCollectionModal('${commit.id}')" style="margin-right: 4px;">💰 Record</button>` : ''}
+          ${commit ? `<button class="btn sm" onclick="deleteCommitment('${commit.id}')" style="background: #ffebee; color: #c00; border-color: #ffcdd2;">✕</button>` : ''}
+        </td>
       </tr>
     `;
-  });
+  }).join('');
 }
 
 function updateLeaderboard() {
   const container = document.getElementById('leaderboardContent');
+  
+  // Validate commitments - remove orphaned entries (no matching allocation)
+  commitmentsData = commitmentsData.filter(c => {
+    const hasAllocation = allocationsData.some(a => a.id === c.allocationId);
+    if (!hasAllocation) {
+      console.warn('⚠️ Removing orphaned commitment:', c);
+    }
+    return hasAllocation;
+  });
+  
   if (commitmentsData.length === 0) {
-    container.innerHTML = 'No commitments yet';
+    container.innerHTML = `
+      <div class="empty">
+        <div class="empty-icon">🏆</div>
+        <div style="font-weight: 600; margin-bottom: 5px;">No commitments yet</div>
+        <div style="font-size: 12px;">Create commitments to see team performance</div>
+      </div>
+    `;
     return;
   }
-  const stats = {};
-  commitmentsData.forEach(c => {
-    stats[c.assignedTo] = (stats[c.assignedTo] || 0) + c.amount;
-  });
-  let html = '<table style="width:100%;"><thead><tr><th>Member</th><th style="text-align:right;">Committed</th></tr></thead><tbody>';
-  Object.entries(stats).forEach(([name, amt]) => {
-    html += `<tr><td>${name}</td><td style="text-align:right;">₹${amt.toLocaleString('en-IN')}</td></tr>`;
-  });
-  container.innerHTML = html + '</tbody></table>';
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// COMMITMENTS
-// ═══════════════════════════════════════════════════════════════════════════
-
-function addCommitment() {
-  const customer = prompt('Customer name:');
-  const amount = prompt('Amount (₹):');
-  const assignedTo = prompt('Assigned to:');
   
-  if (customer && amount && assignedTo) {
-    commitmentsData.push({
-      id: Date.now().toString(),
-      customer: customer,
-      amount: parseNum(amount),
-      assignedTo: assignedTo,
-      date: new Date().toISOString().split('T')[0]
-    });
-    saveToFirestore();
-    updateCommitments();
-    updateLeaderboard();
-    toast('Commitment added');
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// FIRESTORE
-// ═══════════════════════════════════════════════════════════════════════════
-
-async function saveToFirestore() {
-  try {
-    await db.collection('dqap_debt').doc('data').set({
-      csvData: csvData,
-      commitmentsData: commitmentsData,
-      updatedAt: new Date().toISOString(),
-      updatedBy: currentUser
-    });
-  } catch (err) {
-    console.error('Save error:', err);
-  }
-}
-
-async function loadFromFirestore() {
-  try {
-    const doc = await db.collection('dqap_debt').doc('data').get();
-    if (doc.exists) {
-      const data = doc.data();
-      csvData = data.csvData || [];
-      commitmentsData = data.commitmentsData || [];
-      updateDashboard();
-      updatePreview();
-    }
-  } catch (err) {
-    console.error('Load error:', err);
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// UTILS
-// ═══════════════════════════════════════════════════════════════════════════
-
-function displayCredentialsHint() {
-  const list = document.getElementById('credentialsList');
-  Object.entries(USERS).forEach(([u, d]) => {
-    const div = document.createElement('div');
-    div.innerHTML = `<strong>${d.name}</strong>: ${u} / ${d.password}`;
-    list.appendChild(div);
+  const users = ['Ravi', 'Jawed', 'Chetan', 'Keshav'];
+  const stats = {};
+  
+  users.forEach(u => {
+    stats[u] = { name: u, count: 0, committed: 0, collected: 0 };
   });
+  
+  // Sum up commitments by user - only count COMMITTED amounts
+  commitmentsData.forEach(c => {
+    if (stats[c.assignedTo]) {
+      stats[c.assignedTo].count++;
+      stats[c.assignedTo].committed += c.amount;  // Committed = allocated amount promised
+      stats[c.assignedTo].collected += c.collected || 0;  // Collected = actual received amount
+    }
+  });
+  
+  const sorted = Object.values(stats).filter(s => s.count > 0).sort((a, b) => b.collected - a.collected);
+  
+  if (sorted.length === 0) {
+    container.innerHTML = `
+      <div class="empty">
+        <div class="empty-icon">🏆</div>
+        <div style="font-weight: 600; margin-bottom: 5px;">No assignments yet</div>
+        <div style="font-size: 12px;">Assign commitments to team members</div>
+      </div>
+    `;
+    return;
+  }
+  
+  container.innerHTML = sorted.map((user, idx) => {
+    // Performance = (Actual Collected / Committed Amount) * 100
+    const perf = user.committed > 0 ? Math.round((user.collected / user.committed) * 100) : 0;
+    const medal = idx === 0 ? '🥇' : (idx === 1 ? '🥈' : (idx === 2 ? '🥉' : ''));
+    
+    return `
+      <div class="leaderboard-item">
+        <div class="leaderboard-rank">${medal}</div>
+        <div class="leaderboard-user">
+          <div class="leaderboard-name">#${idx + 1} ${user.name}</div>
+          <div style="font-size: 11px; color: var(--t2);">Collection Performance: ${perf}% (Collected ÷ Committed)</div>
+        </div>
+        <div class="leaderboard-stats">
+          <div class="stat-item">
+            <div class="stat-item-label">Assignments</div>
+            <div class="stat-item-value">${user.count}</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-item-label">Committed</div>
+            <div class="stat-item-value">₹${(user.committed/100000).toFixed(1)}L</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-item-label">Collected</div>
+            <div class="stat-item-value" style="color: #3F704D;">₹${(user.collected/100000).toFixed(1)}L</div>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+  
+  // Save cleaned data back to localStorage
+  saveToLocalStorage();
 }
 
-function toast(msg) {
-  const el = document.createElement('div');
-  el.className = 'toast';
-  el.textContent = msg;
-  document.body.appendChild(el);
-  setTimeout(() => el.remove(), 2000);
+// Modal Functions
+async function openLinkModal(customerName) {
+  currentCustomer = csvData.find(c => c.customerName === customerName);
+  if (!currentCustomer) return;
+  
+  tempAllocations = [...allocationsData.filter(a => a.customer === customerName)];
+  const allocated = allocationsData.filter(a => a.customer === customerName).reduce((s, a) => s + a.amount, 0);
+  
+  document.getElementById('modalCustomer').value = customerName;
+  document.getElementById('modalOutstanding').value = `₹${currentCustomer.outstanding.toLocaleString('en-IN')}`;
+  document.getElementById('modalRemaining').value = `₹${(currentCustomer.outstanding - allocated).toLocaleString('en-IN')}`;
+  
+  document.getElementById('projectSelect').innerHTML = '<option value="">-- Select Project --</option>';
+  document.getElementById('poSelect').innerHTML = '<option value="">-- Select PO --</option>';
+  document.getElementById('allocationAmount').value = '';
+  
+  await loadProjects();
+  updateAllocationsList();
+  document.getElementById('linkModal').classList.add('active');
 }
 
+async function loadProjects() {
+  try {
+    const snap = await db.collection('dqap_projects').get();
+    projectsData = [];
+    snap.forEach(doc => {
+      const data = doc.data();
+      let pos = [];
+      
+      // Handle different PO array structures
+      if (data.pos && Array.isArray(data.pos)) {
+        pos = data.pos.map(p => ({ 
+          number: p.number || p.poNumber || '', 
+          value: p.value || p.poValue || 0 
+        }));
+      } else if (data.poNumber) {
+        // Fallback: single PO per project
+        pos = [{ number: data.poNumber, value: data.poValue || 0 }];
+      }
+      
+      projectsData.push({
+        id: doc.id,
+        name: data.name || '',
+        number: data.number || '',
+        pos: pos
+      });
+    });
+    
+    const sel = document.getElementById('projectSelect');
+    sel.innerHTML = '<option value="">-- Select Project --</option>';
+    projectsData.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = `${p.name} (${p.number})`;
+      sel.appendChild(opt);
+    });
+    
+    console.log('✓ Loaded projects:', projectsData);
+  } catch (err) {
+    console.warn('Could not load projects:', err.message);
+  }
+}
+
+function loadPOs() {
+  const projId = document.getElementById('projectSelect').value;
+  const poSel = document.getElementById('poSelect');
+  poSel.innerHTML = '<option value="">-- Select PO --</option>';
+  
+  if (!projId) return;
+  
+  const proj = projectsData.find(p => p.id === projId);
+  console.log('Selected project:', proj);
+  
+  if (proj && proj.pos && proj.pos.length > 0) {
+    proj.pos.forEach(po => {
+      const opt = document.createElement('option');
+      opt.value = po.number;
+      opt.textContent = po.value > 0 
+        ? `${po.number} - ₹${po.value.toLocaleString('en-IN')}`
+        : po.number;
+      poSel.appendChild(opt);
+    });
+    console.log('✓ Loaded', proj.pos.length, 'POs for project:', proj.name);
+  } else {
+    // Fallback: let user manually enter PO
+    console.warn('No POs found for project:', proj?.name, '— allowing manual entry');
+    const opt = document.createElement('option');
+    opt.value = 'manual';
+    opt.textContent = '--- Enter PO Manually ---';
+    poSel.appendChild(opt);
+  }
+}
+
+function addAllocation() {
+  const projId = document.getElementById('projectSelect').value;
+  const poNum = document.getElementById('poSelect').value;
+  const amount = parseFloat(document.getElementById('allocationAmount').value) || 0;
+  
+  if (!projId || !poNum || amount <= 0) {
+    showToast('Please fill all fields', 'error');
+    return;
+  }
+  
+  const proj = projectsData.find(p => p.id === projId);
+  
+  tempAllocations.push({
+    id: Date.now().toString(),
+    customer: currentCustomer.customerName,
+    project: proj.name,
+    po: poNum,
+    amount: amount
+  });
+  
+  document.getElementById('projectSelect').value = '';
+  document.getElementById('poSelect').value = '';
+  document.getElementById('allocationAmount').value = '';
+  updateAllocationsList();
+}
+
+function updateAllocationsList() {
+  const div = document.getElementById('allocationsList');
+  if (tempAllocations.length === 0) {
+    div.innerHTML = '<div style="color: var(--t2); text-align: center; font-size: 11px;">No allocations yet</div>';
+    return;
+  }
+  
+  div.innerHTML = tempAllocations.map((a, idx) => `
+    <div style="background: #fff; padding: 10px; margin-bottom: 8px; border-radius: 4px; border-left: 3px solid var(--p); display: flex; justify-content: space-between; align-items: center;">
+      <div style="flex: 1;">
+        <div style="font-weight: 500; font-size: 12px;">${a.project}</div>
+        <div style="font-size: 11px; color: var(--t2);">PO: ${a.po}</div>
+        <div style="font-weight: 600; color: var(--p); margin-top: 4px;">₹${a.amount.toLocaleString('en-IN')}</div>
+      </div>
+      <button class="btn sm" onclick="deleteAllocation(${idx})" style="background: #ffebee; color: #c00; border-color: #ffcdd2; margin-left: 10px;">✕ Delete</button>
+    </div>
+  `).join('');
+}
+
+function deleteAllocation(idx) {
+  tempAllocations.splice(idx, 1);
+  updateAllocationsList();
+  showToast('Allocation deleted', 'success');
+}
+
+function saveAllocations() {
+  allocationsData = allocationsData.filter(a => a.customer !== currentCustomer.customerName);
+  allocationsData.push(...tempAllocations);
+  
+  saveToLocalStorage();
+  closeModal('linkModal');
+  updateAllTabs();
+  showToast('✅ Allocations saved', 'success');
+}
+
+function openCommitmentModal(allocId) {
+  currentAllocationId = allocId;
+  const alloc = allocationsData.find(a => a.id === allocId);
+  const commit = commitmentsData.find(c => c.allocationId === allocId);
+  
+  if (!alloc) return;
+  
+  document.getElementById('commitCustomer').value = alloc.customer;
+  document.getElementById('commitProject').value = alloc.project;
+  document.getElementById('commitPO').value = alloc.po;
+  document.getElementById('commitAmount').value = `₹${alloc.amount.toLocaleString('en-IN')}`;
+  document.getElementById('commitAmountDisplay').textContent = alloc.amount.toLocaleString('en-IN');
+  
+  if (commit) {
+    document.getElementById('assignedTo').value = commit.assignedTo;
+    document.getElementById('commitDate').value = commit.commitDate;
+  } else {
+    document.getElementById('assignedTo').value = '';
+    document.getElementById('commitDate').value = '';
+  }
+  
+  document.getElementById('commitmentModal').classList.add('active');
+}
+
+function saveCommitment() {
+  const assigned = document.getElementById('assignedTo').value;
+  const date = document.getElementById('commitDate').value;
+  
+  if (!assigned || !date) {
+    showToast('Please fill all required fields', 'error');
+    return;
+  }
+  
+  const alloc = allocationsData.find(a => a.id === currentAllocationId);
+  
+  commitmentsData = commitmentsData.filter(c => c.allocationId !== currentAllocationId);
+  
+  const newCommit = {
+    id: Date.now().toString(),
+    allocationId: currentAllocationId,
+    customer: alloc.customer,
+    amount: alloc.amount,
+    assignedTo: assigned,
+    commitDate: date,
+    collected: 0,  // Always 0 initially
+    collectionDate: null  // To be filled when payment received
+  };
+  
+  commitmentsData.push(newCommit);
+  
+  console.log('✅ Commitment saved:', {
+    customer: newCommit.customer,
+    amount: newCommit.amount,
+    commitDate: newCommit.commitDate,
+    assignedTo: newCommit.assignedTo
+  });
+  
+  saveToLocalStorage();
+  closeModal('commitmentModal');
+  updateAllTabs();
+  showToast('✅ Commitment saved', 'success');
+}
+
+function openCollectionModal(commitmentId) {
+  const commit = commitmentsData.find(c => c.id === commitmentId);
+  if (!commit) return;
+  
+  currentCommitmentId = commitmentId;
+  document.getElementById('colCustomer').textContent = commit.customer;
+  document.getElementById('colAmount').textContent = commit.amount.toLocaleString('en-IN');
+  document.getElementById('collectedAmountInput').value = commit.collected || 0;
+  document.getElementById('collectionDateInput').value = commit.collectionDate || '';
+  document.getElementById('collectionModal').classList.add('active');
+}
+
+function saveCollection() {
+  const collectedAmt = parseFloat(document.getElementById('collectedAmountInput').value) || 0;
+  const collectionDate = document.getElementById('collectionDateInput').value;
+  
+  if (!collectionDate) {
+    showToast('Please enter collection date', 'error');
+    return;
+  }
+  
+  const commit = commitmentsData.find(c => c.id === currentCommitmentId);
+  if (!commit) return;
+  
+  if (collectedAmt > commit.amount) {
+    showToast('Collected amount cannot exceed committed amount', 'error');
+    return;
+  }
+  
+  commit.collected = collectedAmt;
+  commit.collectionDate = collectionDate;
+  
+  console.log('✅ Collection recorded:', {
+    customer: commit.customer,
+    committed: commit.amount,
+    collected: collectedAmt,
+    date: collectionDate
+  });
+  
+  saveToLocalStorage();
+  closeModal('collectionModal');
+  updateAllTabs();
+  showToast('✅ Collection recorded', 'success');
+}
+
+function deleteCommitment(commitmentId) {
+  if (!confirm('Delete this commitment?')) return;
+  
+  commitmentsData = commitmentsData.filter(c => c.id !== commitmentId);
+  
+  console.log('🗑️ Commitment deleted');
+  
+  saveToLocalStorage();
+  updateAllTabs();
+  showToast('✅ Commitment deleted', 'success');
+}
+function closeModal(modalId) {
+  document.getElementById(modalId).classList.remove('active');
+}
+
+// Local Storage
+function saveToLocalStorage() {
+  localStorage.setItem('debt_csv', JSON.stringify(csvData));
+  localStorage.setItem('debt_allocations', JSON.stringify(allocationsData));
+  localStorage.setItem('debt_commitments', JSON.stringify(commitmentsData));
+}
+
+function loadFromLocalStorage() {
+  csvData = JSON.parse(localStorage.getItem('debt_csv') || '[]');
+  allocationsData = JSON.parse(localStorage.getItem('debt_allocations') || '[]');
+  commitmentsData = JSON.parse(localStorage.getItem('debt_commitments') || '[]');
+}
+
+// User Management
+// Firebase Authentication Functions
+function handleLogin(event) {
+  if (event) event.preventDefault();
+  
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  
+  if (!email || !password) {
+    showLoginError('Please enter email and password');
+    return;
+  }
+  
+  // Show loading state
+  const btn = document.querySelector('button[onclick="handleLogin()"]');
+  const originalText = btn.textContent;
+  btn.textContent = '⏳ Signing in...';
+  btn.disabled = true;
+  
+  auth.signInWithEmailAndPassword(email, password)
+    .then((userCredential) => {
+      // Login successful - auth state listener will handle the rest
+      document.getElementById('loginEmail').value = '';
+      document.getElementById('loginPassword').value = '';
+      document.getElementById('loginError').style.display = 'none';
+    })
+    .catch((error) => {
+      console.error('Login error:', error);
+      let message = 'Login failed. Please try again.';
+      
+      if (error.code === 'auth/user-not-found') {
+        message = 'Email not found. Check your email or contact admin.';
+      } else if (error.code === 'auth/wrong-password') {
+        message = 'Incorrect password. Please try again.';
+      } else if (error.code === 'auth/invalid-email') {
+        message = 'Invalid email format.';
+      } else if (error.code === 'auth/user-disabled') {
+        message = 'This account has been disabled.';
+      }
+      
+      showLoginError(message);
+      btn.textContent = originalText;
+      btn.disabled = false;
+    });
+}
+
+function showLoginError(message) {
+  const errorEl = document.getElementById('loginError');
+  errorEl.textContent = message;
+  errorEl.style.display = 'block';
+}
+
+function handleLogout() {
+  if (confirm('Are you sure you want to sign out?')) {
+    auth.signOut()
+      .then(() => {
+        clearFaviconBadge();
+        localStorage.clear();
+        showToast('👋 Signed out successfully', 'success');
+      })
+      .catch((error) => {
+        console.error('Logout error:', error);
+        showToast('Error signing out: ' + error.message, 'error');
+      });
+  }
+}
+
+function updateUserInfo() {
+  if (!currentUserData) return;
+  
+  const name = currentUserData.name || currentUser.email.split('@')[0];
+  const roleEmoji = getRoleEmoji(currentUserRole);
+  
+  document.getElementById('currentUser').innerHTML = `
+    <span>${roleEmoji} ${name}</span>
+    <button class="btn sm" onclick="handleLogout()" style="margin-left: 10px; font-size: 12px; padding: 6px 12px;">
+      🚪 Sign Out
+    </button>
+  `;
+}
+
+function getRoleEmoji(role) {
+  const emojis = {
+    'admin': '👑',
+    'tech_admin': '⚙️',
+    'csv_upload': '📤',
+    'collections': '🏃',
+    'follow_up': '📞',
+    'sales': '💼',
+  };
+  return emojis[role] || '👤';
+}
+
+// Favicon Badge System
+function updateFaviconBadge(notificationText) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 64;
+  canvas.height = 64;
+  
+  const ctx = canvas.getContext('2d');
+  
+  // Draw base favicon (app icon)
+  ctx.fillStyle = '#006994';
+  ctx.fillRect(0, 0, 64, 64);
+  
+  // Draw coin icon
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 40px Arial';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('💰', 32, 32);
+  
+  // Draw notification badge
+  ctx.fillStyle = '#FF5252';
+  ctx.beginPath();
+  ctx.arc(52, 12, 12, 0, 2 * Math.PI);
+  ctx.fill();
+  
+  // Draw notification number/indicator
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 14px Arial';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('!', 52, 12);
+  
+  // Update favicon
+  const link = document.querySelector("link[rel='icon']") || document.createElement('link');
+  link.rel = 'icon';
+  link.href = canvas.toDataURL();
+  document.head.appendChild(link);
+  
+  // Update browser title
+  document.title = `🔔 ${notificationText} - Debt Management`;
+}
+
+function clearFaviconBadge() {
+  // Reset favicon to default
+  const link = document.querySelector("link[rel='icon']");
+  if (link) {
+    link.href = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect fill="%23006994" width="64" height="64"/><text x="32" y="40" font-size="40" text-anchor="middle" fill="%23fff">💰</text></svg>';
+  }
+  document.title = 'Debt Management';
+}
+
+// Permission Check Functions
+function isAdmin() {
+  return ['admin', 'tech_admin'].includes(currentUserRole);
+}
+
+function isCSVUploader() {
+  return ['csv_upload', 'admin', 'tech_admin'].includes(currentUserRole);
+}
+
+function canEditAllCommitments() {
+  return ['admin', 'tech_admin'].includes(currentUserRole);
+}
+
+function checkAdminNotifications() {
+  if (!isAdmin()) return;
+  
+  // Admins see all users' pending commitments summary
+  const uncommittedCount = allocationsData.filter(a => 
+    !commitmentsData.some(c => c.allocationId === a.id)
+  ).length;
+  
+  if (uncommittedCount > 0) {
+    showNotificationBadge(`⚠️ ${uncommittedCount} Pending Allocations`);
+  }
+}
+
+function checkNotifications() {
+  if (!currentUser) return;
+  
+  // Admin-specific checks
+  if (isAdmin()) {
+    checkAdminNotifications();
+    return;
+  }
+  
+  const now = new Date();
+  const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday
+  const hours = now.getHours();
+  const csvUploadTime = localStorage.getItem('debt_lastUploadTime');
+  const uploadNotificationSeen = localStorage.getItem('debt_uploadNotificationSeen');
+  
+  // Check for Monday 10 AM CSV upload reminder (CSV uploaders + Admins)
+  if (isCSVUploader() && dayOfWeek === 1 && hours >= 10 && hours < 11) {
+    const lastReminder = localStorage.getItem('debt_lastCsvReminder');
+    const today = new Date().toDateString();
+    
+    if (lastReminder !== today) {
+      showCSVUploadReminder();
+      localStorage.setItem('debt_lastCsvReminder', today);
+      showNotificationBadge('📤 Upload CSV Now');
+    }
+  }
+  
+  // Check for new CSV upload notification (all users except CSV uploaders and Admins)
+  if (!isCSVUploader() && csvUploadTime && !uploadNotificationSeen) {
+    const uploadTime = new Date(csvUploadTime);
+    const timeSinceUpload = (now - uploadTime) / 1000 / 60; // in minutes
+    
+    if (timeSinceUpload < 30) { // Show notification if uploaded in last 30 minutes
+      showCommitmentReminder();
+      localStorage.setItem('debt_uploadNotificationSeen', 'true');
+      showNotificationBadge('📋 Enter Your Commitments');
+    }
+  }
+}
+
+function showCSVUploadReminder() {
+  const lastUploadTime = localStorage.getItem('debt_lastUploadTime');
+  if (lastUploadTime) {
+    const date = new Date(lastUploadTime);
+    document.getElementById('lastUploadTime').textContent = date.toLocaleString('en-IN');
+  }
+  document.getElementById('csvUploadModal').classList.add('active');
+}
+
+function showCommitmentReminder() {
+  const uploadTime = localStorage.getItem('debt_lastUploadTime');
+  if (uploadTime) {
+    const date = new Date(uploadTime);
+    document.getElementById('uploadNotifyTime').textContent = date.toLocaleString('en-IN');
+  }
+  document.getElementById('commitmentReminderModal').classList.add('active');
+}
+
+function showNotificationBadge(text) {
+  document.getElementById('notificationText').textContent = text;
+  document.getElementById('notificationBadge').style.display = 'flex';
+  updateFaviconBadge(text);
+}
+
+function hideNotificationBadge() {
+  document.getElementById('notificationBadge').style.display = 'none';
+  clearFaviconBadge();
+}
+
+function openNotificationModal() {
+  const currentUser = localStorage.getItem('debt_currentUser');
+  if (currentUser === 'Dev') {
+    showCSVUploadReminder();
+  } else {
+    showCommitmentReminder();
+  }
+}
+
+function goToUploadTab() {
+  closeModal('csvUploadModal');
+  hideNotificationBadge();
+  switchTab('upload');
+}
+
+function goToSummaryTab() {
+  closeModal('commitmentReminderModal');
+  hideNotificationBadge();
+  switchTab('summary');
+}
+
+// Toast
+function showToast(msg, type = 'success') {
+  const toast = document.createElement('div');
+  toast.className = `toast ${type === 'error' ? 'error' : ''}`;
+  toast.textContent = msg;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 3000);
+}
+
+// Update CSV upload timestamp when saving
+const originalSaveToLocalStorage = saveToLocalStorage;
+function saveToLocalStorage() {
+  originalSaveToLocalStorage();
+  
+  // If CSV data was just uploaded, save timestamp
+  if (csvData.length > 0) {
+    const lastUploadTime = localStorage.getItem('debt_lastUploadTime');
+    if (!lastUploadTime || new Date() - new Date(lastUploadTime) > 300000) { // If no upload in last 5 mins
+      localStorage.setItem('debt_lastUploadTime', new Date().toISOString());
+      localStorage.removeItem('debt_uploadNotificationSeen'); // Reset for new users to see
+    }
+  }
+}
+
+// Initialize
+// Auth state listener will handle everything
+// Just wait for Firebase to determine auth state
 </script>
 
 </body>
