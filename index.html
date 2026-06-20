@@ -27,6 +27,7 @@
       --bd: rgba(0, 0, 0, 0.11);
       --bds: rgba(0, 0, 0, 0.22);
       --rad: 10px;
+      --success: #3F704D;
     }
     
     body {
@@ -81,85 +82,136 @@
       background: rgba(255, 255, 255, 0.3);
     }
     
-    .loading-screen {
+    .login-screen {
       display: flex;
       align-items: center;
       justify-content: center;
-      min-height: 400px;
-      text-align: center;
+      min-height: 100vh;
+      background: var(--bg);
     }
     
-    .spinner {
-      width: 40px;
-      height: 40px;
-      border: 4px solid var(--bd);
-      border-top-color: var(--p);
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-      margin-bottom: 16px;
-    }
-    
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-    
-    .not-logged-in {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 400px;
-      text-align: center;
-      flex-direction: column;
-      gap: 16px;
-    }
-    
-    .not-logged-in-icon {
-      font-size: 48px;
-      margin-bottom: 8px;
-    }
-    
-    .not-logged-in h2 {
-      font-size: 18px;
-      color: var(--t1);
-      margin-bottom: 8px;
-    }
-    
-    .not-logged-in p {
-      color: var(--t2);
-      margin-bottom: 20px;
+    .login-card {
+      background: var(--card);
+      border-radius: var(--rad);
+      padding: 40px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      width: 100%;
       max-width: 400px;
     }
     
-    .btn {
+    .login-header {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+    
+    .login-header-icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+    }
+    
+    .login-header h2 {
+      font-size: 20px;
+      color: var(--t1);
+      margin-bottom: 8px;
+    }
+    
+    .login-header p {
+      color: var(--t2);
+      font-size: 13px;
+    }
+    
+    .form-group {
+      margin-bottom: 16px;
+    }
+    
+    .form-group label {
+      display: block;
+      margin-bottom: 6px;
+      font-weight: 500;
+      color: var(--t1);
+      font-size: 12px;
+    }
+    
+    .form-group input {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--bds);
+      border-radius: 6px;
+      font-size: 13px;
+      font-family: inherit;
+      transition: all 0.2s;
+    }
+    
+    .form-group input:focus {
+      outline: none;
+      border-color: var(--p);
+      box-shadow: 0 0 0 3px rgba(0, 105, 148, 0.1);
+    }
+    
+    .login-btn {
+      width: 100%;
+      padding: 12px;
       background: var(--p);
       color: white;
       border: none;
-      padding: 10px 20px;
       border-radius: 6px;
-      cursor: pointer;
       font-size: 13px;
-      font-weight: 500;
+      font-weight: 600;
+      cursor: pointer;
       transition: all 0.2s;
-      text-decoration: none;
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
     }
     
-    .btn:hover {
+    .login-btn:hover {
       background: var(--pd);
     }
     
-    .btn-secondary {
-      background: transparent;
-      border: 1px solid var(--bds);
-      color: var(--t1);
-      margin-left: 8px;
+    .login-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
     }
     
-    .btn-secondary:hover {
+    .login-error {
+      color: #D32F2F;
+      font-size: 12px;
+      margin-top: 12px;
+      padding: 10px;
+      background: #FFEBEE;
+      border-radius: 4px;
+      display: none;
+    }
+    
+    .credentials-hint {
+      margin-top: 20px;
+      padding-top: 20px;
+      border-top: 1px solid var(--bd);
+      font-size: 12px;
+      color: var(--t2);
+      text-align: center;
+    }
+    
+    .credentials-list {
+      margin-top: 12px;
+      font-size: 11px;
       background: var(--bg);
-      border-color: var(--bd);
+      padding: 10px;
+      border-radius: 4px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    
+    .credentials-list div {
+      margin: 6px 0;
+      padding: 4px 0;
+      border-bottom: 1px solid var(--bds);
+    }
+    
+    .credentials-list div:last-child {
+      border-bottom: none;
+    }
+    
+    .credentials-list strong {
+      color: var(--p);
+      font-weight: 600;
     }
     
     .content {
@@ -174,163 +226,246 @@
     .user-info strong {
       color: var(--t1);
     }
+    
+    .loading-spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid var(--bd);
+      border-top-color: var(--p);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
   </style>
 </head>
 <body>
 
-<div class="header">
-  <div class="header-left">
-    <h1>💰 Debt Management</h1>
-    <p>Track collections and team commitments</p>
-  </div>
-  <div class="header-right">
-    <div class="user-info">
-      <strong id="userName">Loading...</strong> <span id="userRole"></span>
-      <button class="logout-btn" onclick="logout()" style="display: none;" id="logoutBtn">Logout</button>
+<div id="loginScreen" class="login-screen">
+  <div class="login-card">
+    <div class="login-header">
+      <div class="login-header-icon">💰</div>
+      <h2>Debt Management</h2>
+      <p>Team Collections Portal</p>
+    </div>
+    
+    <form id="loginForm" onsubmit="handleLogin(event)">
+      <div class="form-group">
+        <label for="email">Email or Name</label>
+        <input type="text" id="email" placeholder="e.g., Updesh or updesh@dqap.in" required>
+      </div>
+      
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" placeholder="Enter password" required>
+      </div>
+      
+      <button type="submit" class="login-btn" id="loginBtn">
+        Sign In
+      </button>
+      
+      <div class="login-error" id="loginError"></div>
+    </form>
+    
+    <div class="credentials-hint">
+      <strong>Demo Credentials:</strong>
+      <div class="credentials-list" id="credentialsList"></div>
     </div>
   </div>
 </div>
 
-<div class="content">
-  <!-- Loading State -->
-  <div id="loadingScreen" class="loading-screen">
-    <div class="spinner"></div>
-    <div>Checking authentication...</div>
-  </div>
-  
-  <!-- Not Logged In State -->
-  <div id="notLoggedInScreen" class="not-logged-in" style="display: none;">
-    <div class="not-logged-in-icon">🔐</div>
-    <h2>Not Logged In</h2>
-    <p>Please log in to the Wiki first, then return to access Debt Management.</p>
-    <div>
-      <button class="btn" onclick="goToWiki()">Go to Wiki</button>
-      <button class="btn btn-secondary" onclick="retryAuth()">Retry</button>
+<div id="mainScreen" style="display: none;">
+  <div class="header">
+    <div class="header-left">
+      <h1>💰 Debt Management</h1>
+      <p>Track collections and team commitments</p>
+    </div>
+    <div class="header-right">
+      <div class="user-info">
+        <strong id="userName">User</strong> <span id="userRole"></span>
+        <button class="logout-btn" onclick="logout()">Logout</button>
+      </div>
     </div>
   </div>
   
-  <!-- Main Content (loaded when authenticated) -->
-  <div id="mainContent" style="display: none;">
-    <p style="color: var(--t2); margin-bottom: 20px;">Debt Management interface loading...</p>
-    <p>If you see this message, the app is initializing.</p>
+  <div class="content">
+    <p style="color: var(--t2);">✅ You are logged in and authenticated!</p>
+    <p style="margin-top: 12px; color: var(--t2);">Debt Management interface is ready to use.</p>
   </div>
 </div>
 
 <script>
 // ═══════════════════════════════════════════════════════════════════════════
-// FIREBASE INITIALIZATION
+// BUILT-IN CREDENTIALS (Can be customized)
 // ═══════════════════════════════════════════════════════════════════════════
 
-firebase.initializeApp({
-  apiKey: "AIzaSyBV2ZQwfqvgPyzLz75wsSIg9N5gjPHY-R8",
-  authDomain: "dqap-wiki.firebaseapp.com",
-  projectId: "dqap-wiki",
-  storageBucket: "dqap-wiki.firebasestorage.app",
-  messagingSenderId: "932523956178",
-  appId: "1:932523956178:web:cc83a8e7369eaa80649a0b"
-});
+const USERS = {
+  'updesh': { name: 'Updesh', role: 'Admin/CEO', password: 'updesh123' },
+  'pratim': { name: 'Pratim', role: 'Technical Admin', password: 'pratim123' },
+  'dev': { name: 'Dev', role: 'CSV Upload', password: 'dev123' },
+  'ravi': { name: 'Ravi', role: 'Collections', password: 'ravi123' },
+  'jawed': { name: 'Jawed', role: 'Follow-up', password: 'jawed123' },
+  'chetan': { name: 'Chetan', role: 'Sales', password: 'chetan123' },
+  'keshav': { name: 'Keshav', role: 'Admin', password: 'keshav123' }
+};
 
-const auth = firebase.auth();
-const db = firebase.firestore();
+// Also allow login by email
+const USER_EMAILS = {
+  'updesh@dqap.in': 'updesh',
+  'pratim@dqap.in': 'pratim',
+  'dev@dqap.in': 'dev',
+  'ravi@dqap.in': 'ravi',
+  'jawed@dqap.in': 'jawed',
+  'chetan@dqap.in': 'chetan',
+  'keshav@dqap.in': 'keshav'
+};
 
 // ═══════════════════════════════════════════════════════════════════════════
-// GLOBAL STATE
+// STATE
 // ═══════════════════════════════════════════════════════════════════════════
 
 let currentUser = null;
 let currentUserRole = null;
-let authCheckTimeout = null;
-let authCheckComplete = false;
 
 // ═══════════════════════════════════════════════════════════════════════════
-// AUTH STATE HANDLER - WITH PROPER LOADING AND TIMEOUT
+// INITIALIZATION
 // ═══════════════════════════════════════════════════════════════════════════
 
-// Wait for auth with timeout
-const AUTH_CHECK_TIMEOUT = 3000; // 3 seconds max wait
-
-firebase.auth().onAuthStateChanged(async (user) => {
-  clearTimeout(authCheckTimeout);
-  authCheckComplete = true;
+window.addEventListener('load', () => {
+  // Display credentials hint
+  displayCredentialsHint();
   
-  const loadingScreen = document.getElementById('loadingScreen');
-  const notLoggedInScreen = document.getElementById('notLoggedInScreen');
-  const mainContent = document.getElementById('mainContent');
-  const logoutBtn = document.getElementById('logoutBtn');
-  
-  if (user) {
-    // ✅ USER IS LOGGED IN
-    currentUser = user;
-    
+  // Check if user is already logged in (from localStorage)
+  const savedUser = localStorage.getItem('debt_user');
+  if (savedUser) {
     try {
-      // Get user role from dqap_users collection
-      const userDoc = await db.collection('dqap_users').doc(user.email).get();
-      if (userDoc.exists) {
-        currentUserRole = userDoc.data().role || 'User';
-      } else {
-        currentUserRole = 'User';
-      }
-    } catch (err) {
-      console.warn('Could not fetch user role:', err);
-      currentUserRole = 'User';
+      const user = JSON.parse(savedUser);
+      currentUser = user.username;
+      currentUserRole = user.role;
+      showMainScreen();
+      return;
+    } catch (e) {
+      localStorage.removeItem('debt_user');
     }
-    
-    // Update UI
-    document.getElementById('userName').textContent = user.displayName || user.email.split('@')[0];
-    document.getElementById('userRole').textContent = `(${currentUserRole})`;
-    
-    // Show logout button
-    logoutBtn.style.display = 'block';
-    
-    // Hide loading, show content
-    loadingScreen.style.display = 'none';
-    notLoggedInScreen.style.display = 'none';
-    mainContent.style.display = 'block';
-    
-    // Initialize app (placeholder for now)
-    console.log('✅ User authenticated:', user.email, 'Role:', currentUserRole);
-    
-  } else {
-    // ❌ USER NOT LOGGED IN
-    loadingScreen.style.display = 'none';
-    notLoggedInScreen.style.display = 'flex';
-    mainContent.style.display = 'none';
-    document.getElementById('logoutBtn').style.display = 'none';
-    
-    console.log('User not authenticated');
   }
+  
+  // Show login screen
+  showLoginScreen();
 });
 
-// Set a timeout to show "Not logged in" if auth takes too long
-authCheckTimeout = setTimeout(() => {
-  if (!authCheckComplete && !currentUser) {
-    const loadingScreen = document.getElementById('loadingScreen');
-    const notLoggedInScreen = document.getElementById('notLoggedInScreen');
+// ═══════════════════════════════════════════════════════════════════════════
+// LOGIN HANDLER
+// ═══════════════════════════════════════════════════════════════════════════
+
+function handleLogin(event) {
+  event.preventDefault();
+  
+  const email = document.getElementById('email').value.toLowerCase().trim();
+  const password = document.getElementById('password').value;
+  const loginError = document.getElementById('loginError');
+  const loginBtn = document.getElementById('loginBtn');
+  
+  // Clear previous errors
+  loginError.style.display = 'none';
+  loginBtn.disabled = true;
+  loginBtn.innerHTML = '<span class="loading-spinner"></span> Signing in...';
+  
+  // Simulate network delay
+  setTimeout(() => {
+    // Look up user by name or email
+    let username = null;
     
-    if (loadingScreen.style.display !== 'none') {
-      loadingScreen.style.display = 'none';
-      notLoggedInScreen.style.display = 'flex';
+    if (email in USERS) {
+      username = email;
+    } else if (email in USER_EMAILS) {
+      username = USER_EMAILS[email];
     }
-  }
-}, AUTH_CHECK_TIMEOUT);
+    
+    if (!username) {
+      showLoginError('User not found. Check your email or name.');
+      loginBtn.disabled = false;
+      loginBtn.textContent = 'Sign In';
+      return;
+    }
+    
+    const user = USERS[username];
+    
+    // Check password
+    if (password !== user.password) {
+      showLoginError('Invalid password. Please try again.');
+      loginBtn.disabled = false;
+      loginBtn.textContent = 'Sign In';
+      return;
+    }
+    
+    // Success!
+    currentUser = username;
+    currentUserRole = user.role;
+    
+    // Save to localStorage
+    localStorage.setItem('debt_user', JSON.stringify({
+      username: username,
+      name: user.name,
+      role: user.role,
+      loginTime: new Date().toISOString()
+    }));
+    
+    // Show main screen
+    showMainScreen();
+  }, 800);
+}
+
+function showLoginError(message) {
+  const loginError = document.getElementById('loginError');
+  loginError.textContent = message;
+  loginError.style.display = 'block';
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
-// FUNCTIONS
+// SCREEN MANAGEMENT
+// ═══════════════════════════════════════════════════════════════════════════
+
+function showLoginScreen() {
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('mainScreen').style.display = 'none';
+  document.getElementById('email').focus();
+}
+
+function showMainScreen() {
+  const user = USERS[currentUser];
+  document.getElementById('userName').textContent = user.name;
+  document.getElementById('userRole').textContent = `(${user.role})`;
+  
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('mainScreen').style.display = 'block';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LOGOUT
 // ═══════════════════════════════════════════════════════════════════════════
 
 function logout() {
-  firebase.auth().signOut().then(() => {
-    window.location.href = 'https://dqapsys.github.io/dqap-wiki/';
+  localStorage.removeItem('debt_user');
+  currentUser = null;
+  currentUserRole = null;
+  showLoginScreen();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DISPLAY CREDENTIALS HINT
+// ═══════════════════════════════════════════════════════════════════════════
+
+function displayCredentialsHint() {
+  const list = document.getElementById('credentialsList');
+  
+  Object.entries(USERS).forEach(([username, user]) => {
+    const div = document.createElement('div');
+    div.innerHTML = `<strong>${user.name}</strong>: ${username} / ${user.password}`;
+    list.appendChild(div);
   });
-}
-
-function goToWiki() {
-  window.location.href = 'https://dqapsys.github.io/dqap-wiki/';
-}
-
-function retryAuth() {
-  // Reload page to retry auth detection
-  window.location.reload();
 }
 
 </script>
