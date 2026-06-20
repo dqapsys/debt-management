@@ -1,0 +1,1140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DQAP Debt Management</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+  
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --p: #006994;
+      --pd: #004A68;
+      --pl: #E4F1FA;
+      --bg: #F4F6FA;
+      --card: #fff;
+      --t1: #111;
+      --t2: #666;
+      --bd: rgba(0,0,0,.11);
+      --bds: rgba(0,0,0,.22);
+      --rad: 10px;
+    }
+    
+    body {
+      font-family: 'DM Sans', 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--t1);
+      font-size: 13px;
+    }
+    
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    
+    .header {
+      background: linear-gradient(135deg, var(--p), var(--pd));
+      color: #fff;
+      padding: 30px 20px;
+      border-radius: var(--rad);
+      margin-bottom: 20px;
+    }
+    
+    .header h1 {
+      font-size: 28px;
+      margin-bottom: 5px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    
+    .header p {
+      opacity: 0.9;
+      font-size: 14px;
+    }
+    
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    
+    .tab-btn {
+      padding: 10px 16px;
+      border-radius: 7px;
+      border: 1px solid var(--bds);
+      background: var(--card);
+      color: var(--t1);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    
+    .tab-btn:hover {
+      border-color: var(--p);
+      background: var(--pl);
+    }
+    
+    .tab-btn.active {
+      background: var(--p);
+      color: #fff;
+      border-color: var(--p);
+    }
+    
+    .tab-content {
+      display: none;
+    }
+    
+    .tab-content.active {
+      display: block;
+    }
+    
+    .card {
+      background: var(--card);
+      border-radius: var(--rad);
+      border: 0.5px solid var(--bd);
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+    
+    .stat {
+      background: var(--card);
+      border-radius: var(--rad);
+      border: 0.5px solid var(--bd);
+      padding: 15px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+    
+    .stat-icon {
+      width: 40px;
+      height: 40px;
+      background: var(--pl);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--p);
+      font-size: 20px;
+      flex-shrink: 0;
+    }
+    
+    .stat-value {
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--p);
+    }
+    
+    .stat-label {
+      font-size: 11px;
+      color: var(--t2);
+      text-transform: uppercase;
+    }
+    
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    
+    th {
+      padding: 12px;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      background: #f5f5f5;
+      border-bottom: 0.5px solid var(--bd);
+    }
+    
+    td {
+      padding: 12px;
+      border-bottom: 0.5px solid var(--bd);
+    }
+    
+    tr:hover td {
+      background: #fafafa;
+    }
+    
+    .btn {
+      padding: 8px 14px;
+      border-radius: 7px;
+      border: 0.5px solid var(--bds);
+      background: transparent;
+      color: var(--t1);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      transition: all 0.15s;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-family: inherit;
+    }
+    
+    .btn:hover {
+      background: #f0f0f0;
+    }
+    
+    .btn.primary {
+      background: var(--p);
+      color: #fff;
+      border-color: var(--p);
+    }
+    
+    .btn.primary:hover {
+      background: var(--pd);
+    }
+    
+    .btn.sm {
+      padding: 6px 10px;
+      font-size: 11px;
+    }
+    
+    input[type="file"],
+    input[type="text"],
+    input[type="number"],
+    input[type="date"],
+    select {
+      padding: 8px 12px;
+      border-radius: 7px;
+      border: 0.5px solid var(--bds);
+      background: #fafafa;
+      font-size: 12px;
+      color: var(--t1);
+      font-family: inherit;
+      outline: none;
+    }
+    
+    input[type="file"]:focus,
+    input[type="text"]:focus,
+    input[type="number"]:focus,
+    input[type="date"]:focus,
+    select:focus {
+      border-color: var(--p);
+      background: #fff;
+    }
+    
+    .form-group {
+      margin-bottom: 12px;
+    }
+    
+    .form-group label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+      color: var(--t1);
+    }
+    
+    .form-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+    }
+    
+    .badge {
+      display: inline-flex;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    
+    .badge.success {
+      background: #E8F5E9;
+      color: #3F704D;
+    }
+    
+    .badge.warning {
+      background: #FFF3E0;
+      color: #E65100;
+    }
+    
+    .badge.pending {
+      background: #FFF3E0;
+      color: #E65100;
+    }
+    
+    .modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .modal.active {
+      display: flex;
+    }
+    
+    .modal-content {
+      background: var(--card);
+      border-radius: var(--rad);
+      padding: 20px;
+      max-width: 600px;
+      width: 90%;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+    }
+    
+    .modal-header {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+    
+    .empty {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--t2);
+    }
+    
+    .empty-icon {
+      font-size: 48px;
+      margin-bottom: 10px;
+    }
+    
+    .leaderboard-item {
+      background: var(--card);
+      border-radius: var(--rad);
+      padding: 16px;
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-left: 4px solid var(--p);
+    }
+    
+    .leaderboard-rank {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--p);
+      min-width: 40px;
+    }
+    
+    .leaderboard-user {
+      flex: 1;
+      margin-left: 12px;
+    }
+    
+    .leaderboard-name {
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    
+    .leaderboard-stats {
+      display: flex;
+      gap: 20px;
+      margin-left: auto;
+    }
+    
+    .stat-item {
+      text-align: center;
+    }
+    
+    .stat-item-label {
+      font-size: 10px;
+      color: var(--t2);
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    
+    .stat-item-value {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--p);
+    }
+    
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: #1B5E20;
+      color: #fff;
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-size: 12px;
+      z-index: 2000;
+      animation: slideIn 0.3s ease;
+    }
+    
+    .toast.error {
+      background: #B71C1C;
+    }
+    
+    @keyframes slideIn {
+      from { transform: translateY(20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <div class="header">
+    <h1><i class="ti ti-coin"></i> Debt Management</h1>
+    <p>Track customer debts, link to projects, manage collections</p>
+  </div>
+  
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('upload')">📤 Upload CSV</button>
+    <button class="tab-btn" onclick="switchTab('summary')">📊 Summary</button>
+    <button class="tab-btn" onclick="switchTab('linking')">🔗 Link Projects</button>
+    <button class="tab-btn" onclick="switchTab('commitments')">📅 Commitments</button>
+    <button class="tab-btn" onclick="switchTab('leaderboard')">🏆 Leaderboard</button>
+  </div>
+  
+  <!-- Upload Tab -->
+  <div id="upload" class="tab-content active">
+    <div class="card">
+      <h3>📤 Upload Tally CSV</h3>
+      <div style="margin-top: 16px;">
+        <input type="file" id="csvFile" accept=".csv" onchange="handleFileSelect(event)">
+        <button class="btn primary" onclick="parseCSV()" style="margin-left: 10px;">Upload & Parse</button>
+      </div>
+    </div>
+    
+    <div class="card">
+      <table>
+        <thead>
+          <tr>
+            <th>Customer Name</th>
+            <th style="text-align: right;">Opening</th>
+            <th style="text-align: right;">Billed</th>
+            <th style="text-align: right;">Collected</th>
+            <th style="text-align: right;">Outstanding</th>
+          </tr>
+        </thead>
+        <tbody id="csvPreview">
+          <tr><td colspan="5" style="text-align: center; color: var(--t2);">Upload a CSV file to see preview</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  
+  <!-- Summary Tab -->
+  <div id="summary" class="tab-content">
+    <div class="stats">
+      <div class="stat">
+        <div class="stat-icon">💰</div>
+        <div>
+          <div class="stat-value" id="statOutstanding">₹0</div>
+          <div class="stat-label">Outstanding</div>
+        </div>
+      </div>
+      <div class="stat">
+        <div class="stat-icon">🔗</div>
+        <div>
+          <div class="stat-value" id="statAllocated">₹0</div>
+          <div class="stat-label">Allocated</div>
+        </div>
+      </div>
+      <div class="stat">
+        <div class="stat-icon">📅</div>
+        <div>
+          <div class="stat-value" id="statCommitted">₹0</div>
+          <div class="stat-label">Committed</div>
+        </div>
+      </div>
+      <div class="stat">
+        <div class="stat-icon">✓</div>
+        <div>
+          <div class="stat-value" id="statCollected">₹0</div>
+          <div class="stat-label">Collected</div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="card">
+      <table>
+        <thead>
+          <tr>
+            <th>Customer</th>
+            <th style="text-align: right;">Outstanding</th>
+            <th style="text-align: right;">Allocated</th>
+            <th style="text-align: right;">Committed</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="summaryTable">
+          <tr><td colspan="5" style="text-align: center; color: var(--t2);">No data yet</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  
+  <!-- Linking Tab -->
+  <div id="linking" class="tab-content">
+    <div class="card">
+      <table>
+        <thead>
+          <tr>
+            <th>Customer</th>
+            <th style="text-align: right;">Outstanding</th>
+            <th style="text-align: right;">Allocated</th>
+            <th style="text-align: right;">Unallocated</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="linkingTable">
+          <tr><td colspan="6" style="text-align: center; color: var(--t2);">Upload CSV first</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  
+  <!-- Commitments Tab -->
+  <div id="commitments" class="tab-content">
+    <div class="card">
+      <table>
+        <thead>
+          <tr>
+            <th>Customer</th>
+            <th>Project</th>
+            <th>PO</th>
+            <th style="text-align: right;">Amount</th>
+            <th>Assigned</th>
+            <th>Date</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="commitmentsTable">
+          <tr><td colspan="8" style="text-align: center; color: var(--t2);">No commitments yet</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  
+  <!-- Leaderboard Tab -->
+  <div id="leaderboard" class="tab-content">
+    <div id="leaderboardContent">
+      <div class="empty">
+        <div class="empty-icon">🏆</div>
+        <div style="font-weight: 600; margin-bottom: 5px;">No commitments yet</div>
+        <div style="font-size: 12px;">Create commitments to see team performance</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Link Modal -->
+<div id="linkModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">Link Customer to Projects</div>
+    
+    <div class="form-group">
+      <label>Customer</label>
+      <input type="text" id="modalCustomer" readonly>
+    </div>
+    
+    <div class="form-group">
+      <label>Outstanding</label>
+      <input type="text" id="modalOutstanding" readonly>
+    </div>
+    
+    <div class="form-group">
+      <label>Remaining to Allocate</label>
+      <input type="text" id="modalRemaining" readonly>
+    </div>
+    
+    <hr style="margin: 16px 0; border: none; border-top: 0.5px solid var(--bd);">
+    
+    <div class="form-group">
+      <label>Project Name *</label>
+      <select id="projectSelect" onchange="loadPOs()">
+        <option value="">-- Select Project --</option>
+      </select>
+    </div>
+    
+    <div class="form-group">
+      <label>PO Number *</label>
+      <select id="poSelect">
+        <option value="">-- Select PO --</option>
+      </select>
+    </div>
+    
+    <div class="form-group">
+      <label>Amount to Allocate *</label>
+      <input type="number" id="allocationAmount" placeholder="0" min="0" step="0.01">
+    </div>
+    
+    <button class="btn primary" onclick="addAllocation()" style="width: 100%; margin-bottom: 12px;">+ Add Allocation</button>
+    
+    <div style="background: #f9f9f9; border-radius: 7px; padding: 12px; margin-bottom: 12px; max-height: 200px; overflow-y: auto;">
+      <div style="font-size: 11px; font-weight: 600; margin-bottom: 8px;">CURRENT ALLOCATIONS:</div>
+      <div id="allocationsList">
+        <div style="color: var(--t2); text-align: center; font-size: 11px;">No allocations yet</div>
+      </div>
+    </div>
+    
+    <div style="display: flex; gap: 8px;">
+      <button class="btn" onclick="closeModal('linkModal')" style="flex: 1;">Cancel</button>
+      <button class="btn primary" onclick="saveAllocations()" style="flex: 1;">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Commitment Modal -->
+<div id="commitmentModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">Set Collection Commitment</div>
+    
+    <div class="form-group">
+      <label>Customer</label>
+      <input type="text" id="commitCustomer" readonly>
+    </div>
+    
+    <div class="form-group">
+      <label>Project</label>
+      <input type="text" id="commitProject" readonly>
+    </div>
+    
+    <div class="form-group">
+      <label>PO</label>
+      <input type="text" id="commitPO" readonly>
+    </div>
+    
+    <div class="form-group">
+      <label>Amount</label>
+      <input type="text" id="commitAmount" readonly>
+    </div>
+    
+    <hr style="margin: 16px 0; border: none; border-top: 0.5px solid var(--bd);">
+    
+    <div class="form-group">
+      <label>Assigned To *</label>
+      <select id="assignedTo">
+        <option value="">-- Select User --</option>
+        <option value="Ravi">Ravi - Field Collections</option>
+        <option value="Jawed">Jawed - Follow-up</option>
+        <option value="Chetan">Chetan - Sales</option>
+        <option value="Keshav">Keshav - Admin</option>
+      </select>
+    </div>
+    
+    <div class="form-group">
+      <label>Commitment Date *</label>
+      <input type="date" id="commitDate">
+    </div>
+    
+    <div class="form-group">
+      <label>Expected Collected Amount (₹)</label>
+      <input type="number" id="collectedAmount" placeholder="0" min="0" step="0.01">
+    </div>
+    
+    <div style="display: flex; gap: 8px;">
+      <button class="btn" onclick="closeModal('commitmentModal')" style="flex: 1;">Cancel</button>
+      <button class="btn primary" onclick="saveCommitment()" style="flex: 1;">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// Firebase Configuration
+firebase.initializeApp({
+  apiKey: "AIzaSyBV2ZQwfqvgPyzLz75wsSIg9N5gjPHY-R8",
+  authDomain: "dqap-wiki.firebaseapp.com",
+  projectId: "dqap-wiki",
+  storageBucket: "dqap-wiki.firebasestorage.app",
+  messagingSenderId: "932523956178",
+  appId: "1:932523956178:web:cc83a8e7369eaa80649a0b"
+});
+
+const db = firebase.firestore();
+
+// Global Data
+let csvData = [];
+let allocationsData = [];
+let commitmentsData = [];
+let projectsData = [];
+let currentCustomer = null;
+let tempAllocations = [];
+let currentAllocationId = null;
+let csvFile = null;
+
+// Tab Switching
+function switchTab(tabName) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+  
+  document.getElementById(tabName).classList.add('active');
+  event.target.classList.add('active');
+  
+  updateAllTabs();
+}
+
+// CSV Handling
+function handleFileSelect(e) {
+  csvFile = e.target.files[0];
+}
+
+function parseCSV() {
+  if (!csvFile) {
+    showToast('Please select a CSV file', 'error');
+    return;
+  }
+  
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const lines = e.target.result.split('\n');
+    csvData = [];
+    
+    for (let i = 14; i < lines.length; i++) {
+      const cells = parseCSVLine(lines[i]);
+      if (cells.length < 5) continue;
+      
+      const customer = cells[0].trim();
+      if (!customer || customer.length < 2 || !/[a-zA-Z]/.test(customer) || customer.includes('TOTAL')) continue;
+      
+      const outstanding = parseIndianNumber(cells[4]);
+      if (outstanding <= 0) continue;
+      
+      csvData.push({
+        customerName: customer,
+        opening: parseIndianNumber(cells[1]),
+        billed: parseIndianNumber(cells[2]),
+        collected: parseIndianNumber(cells[3]),
+        outstanding: outstanding
+      });
+    }
+    
+    csvData.sort((a, b) => b.outstanding - a.outstanding);
+    saveToLocalStorage();
+    updateAllTabs();
+    showToast(`✅ Loaded ${csvData.length} customers`, 'success');
+  };
+  reader.readAsText(csvFile);
+}
+
+function parseCSVLine(line) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+  
+  for (let i = 0; i < line.length; i++) {
+    if (line[i] === '"') inQuotes = !inQuotes;
+    else if (line[i] === ',' && !inQuotes) {
+      result.push(current);
+      current = '';
+    } else {
+      current += line[i];
+    }
+  }
+  result.push(current);
+  return result;
+}
+
+function parseIndianNumber(str) {
+  return parseFloat((str || '').replace(/[₹,]/g, '')) || 0;
+}
+
+// Update Functions
+function updateAllTabs() {
+  updateCSVPreview();
+  updateSummary();
+  updateLinking();
+  updateCommitments();
+  updateLeaderboard();
+}
+
+function updateCSVPreview() {
+  const tbody = document.getElementById('csvPreview');
+  if (csvData.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--t2);">Upload a CSV file to see preview</td></tr>';
+    return;
+  }
+  
+  tbody.innerHTML = csvData.map(row => `
+    <tr>
+      <td><strong>${row.customerName}</strong></td>
+      <td style="text-align: right;">₹${row.opening.toLocaleString('en-IN')}</td>
+      <td style="text-align: right;">₹${row.billed.toLocaleString('en-IN')}</td>
+      <td style="text-align: right;">₹${row.collected.toLocaleString('en-IN')}</td>
+      <td style="text-align: right;">₹${row.outstanding.toLocaleString('en-IN')}</td>
+    </tr>
+  `).join('');
+}
+
+function updateSummary() {
+  if (csvData.length === 0) return;
+  
+  const totalOut = csvData.reduce((s, r) => s + r.outstanding, 0);
+  const totalAlloc = allocationsData.reduce((s, a) => s + (a.amount || 0), 0);
+  const totalCommit = commitmentsData.reduce((s, c) => s + (c.amount || 0), 0);
+  const totalCollect = commitmentsData.reduce((s, c) => s + (c.collected || 0), 0);
+  
+  document.getElementById('statOutstanding').textContent = `₹${totalOut.toLocaleString('en-IN')}`;
+  document.getElementById('statAllocated').textContent = `₹${totalAlloc.toLocaleString('en-IN')}`;
+  document.getElementById('statCommitted').textContent = `₹${totalCommit.toLocaleString('en-IN')}`;
+  document.getElementById('statCollected').textContent = `₹${totalCollect.toLocaleString('en-IN')}`;
+  
+  const tbody = document.getElementById('summaryTable');
+  tbody.innerHTML = csvData.map(customer => {
+    const allocated = allocationsData.filter(a => a.customer === customer.customerName).reduce((s, a) => s + a.amount, 0);
+    const committed = commitmentsData.filter(c => c.customer === customer.customerName).reduce((s, c) => s + c.amount, 0);
+    const status = committed > 0 ? 'success' : (allocated > 0 ? 'warning' : 'pending');
+    const statusText = committed > 0 ? '✓ Committed' : (allocated > 0 ? 'Partial' : 'Pending');
+    
+    return `
+      <tr>
+        <td><strong>${customer.customerName}</strong></td>
+        <td style="text-align: right;">₹${customer.outstanding.toLocaleString('en-IN')}</td>
+        <td style="text-align: right;">₹${allocated.toLocaleString('en-IN')}</td>
+        <td style="text-align: right;">₹${committed.toLocaleString('en-IN')}</td>
+        <td><span class="badge ${status}">${statusText}</span></td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function updateLinking() {
+  const tbody = document.getElementById('linkingTable');
+  if (csvData.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--t2);">Upload CSV first</td></tr>';
+    return;
+  }
+  
+  tbody.innerHTML = csvData.map(customer => {
+    const allocated = allocationsData.filter(a => a.customer === customer.customerName).reduce((s, a) => s + a.amount, 0);
+    const unallocated = customer.outstanding - allocated;
+    const status = unallocated === 0 ? 'success' : (allocated > 0 ? 'warning' : 'pending');
+    const statusText = unallocated === 0 ? 'Complete' : (allocated > 0 ? 'Partial' : 'Pending');
+    
+    return `
+      <tr>
+        <td><strong>${customer.customerName}</strong></td>
+        <td style="text-align: right;">₹${customer.outstanding.toLocaleString('en-IN')}</td>
+        <td style="text-align: right;">₹${allocated.toLocaleString('en-IN')}</td>
+        <td style="text-align: right;">₹${unallocated.toLocaleString('en-IN')}</td>
+        <td><span class="badge ${status}">${statusText}</span></td>
+        <td><button class="btn sm primary" onclick="openLinkModal('${customer.customerName}')">Link</button></td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function updateCommitments() {
+  const tbody = document.getElementById('commitmentsTable');
+  if (allocationsData.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--t2);">No allocations yet</td></tr>';
+    return;
+  }
+  
+  tbody.innerHTML = allocationsData.map(alloc => {
+    const commit = commitmentsData.find(c => c.allocationId === alloc.id);
+    const status = commit ? 'success' : 'pending';
+    const statusText = commit ? '✓ Committed' : 'Pending';
+    const assigned = commit ? commit.assignedTo : '-';
+    const date = commit ? new Date(commit.date).toLocaleDateString('en-IN') : '-';
+    
+    return `
+      <tr>
+        <td><strong>${alloc.customer}</strong></td>
+        <td>${alloc.project}</td>
+        <td>${alloc.po}</td>
+        <td style="text-align: right;">₹${alloc.amount.toLocaleString('en-IN')}</td>
+        <td>${assigned}</td>
+        <td>${date}</td>
+        <td><span class="badge ${status}">${statusText}</span></td>
+        <td><button class="btn sm primary" onclick="openCommitmentModal('${alloc.id}')">${commit ? 'Edit' : 'Set'}</button></td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function updateLeaderboard() {
+  const container = document.getElementById('leaderboardContent');
+  
+  if (commitmentsData.length === 0) {
+    container.innerHTML = `
+      <div class="empty">
+        <div class="empty-icon">🏆</div>
+        <div style="font-weight: 600; margin-bottom: 5px;">No commitments yet</div>
+        <div style="font-size: 12px;">Create commitments to see team performance</div>
+      </div>
+    `;
+    return;
+  }
+  
+  const users = ['Ravi', 'Jawed', 'Chetan', 'Keshav'];
+  const stats = {};
+  
+  users.forEach(u => {
+    stats[u] = { name: u, count: 0, committed: 0, collected: 0 };
+  });
+  
+  commitmentsData.forEach(c => {
+    if (stats[c.assignedTo]) {
+      stats[c.assignedTo].count++;
+      stats[c.assignedTo].committed += c.amount;
+      stats[c.assignedTo].collected += c.collected || 0;
+    }
+  });
+  
+  const sorted = Object.values(stats).filter(s => s.count > 0).sort((a, b) => b.collected - a.collected);
+  
+  container.innerHTML = sorted.map((user, idx) => {
+    const perf = user.committed > 0 ? Math.round((user.collected / user.committed) * 100) : 0;
+    const medal = idx === 0 ? '🥇' : (idx === 1 ? '🥈' : (idx === 2 ? '🥉' : ''));
+    
+    return `
+      <div class="leaderboard-item">
+        <div class="leaderboard-rank">${medal}</div>
+        <div class="leaderboard-user">
+          <div class="leaderboard-name">#${idx + 1} ${user.name}</div>
+          <div style="font-size: 11px; color: var(--t2);">Performance: ${perf}%</div>
+        </div>
+        <div class="leaderboard-stats">
+          <div class="stat-item">
+            <div class="stat-item-label">Assignments</div>
+            <div class="stat-item-value">${user.count}</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-item-label">Committed</div>
+            <div class="stat-item-value">₹${(user.committed/100000).toFixed(1)}L</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-item-label">Collected</div>
+            <div class="stat-item-value">₹${(user.collected/100000).toFixed(1)}L</div>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// Modal Functions
+async function openLinkModal(customerName) {
+  currentCustomer = csvData.find(c => c.customerName === customerName);
+  if (!currentCustomer) return;
+  
+  tempAllocations = [...allocationsData.filter(a => a.customer === customerName)];
+  const allocated = allocationsData.filter(a => a.customer === customerName).reduce((s, a) => s + a.amount, 0);
+  
+  document.getElementById('modalCustomer').value = customerName;
+  document.getElementById('modalOutstanding').value = `₹${currentCustomer.outstanding.toLocaleString('en-IN')}`;
+  document.getElementById('modalRemaining').value = `₹${(currentCustomer.outstanding - allocated).toLocaleString('en-IN')}`;
+  
+  document.getElementById('projectSelect').innerHTML = '<option value="">-- Select Project --</option>';
+  document.getElementById('poSelect').innerHTML = '<option value="">-- Select PO --</option>';
+  document.getElementById('allocationAmount').value = '';
+  
+  await loadProjects();
+  updateAllocationsList();
+  document.getElementById('linkModal').classList.add('active');
+}
+
+async function loadProjects() {
+  try {
+    const snap = await db.collection('dqap_projects').get();
+    projectsData = [];
+    snap.forEach(doc => {
+      const data = doc.data();
+      projectsData.push({
+        id: doc.id,
+        name: data.name || '',
+        number: data.number || '',
+        pos: (data.pos || []).map(p => ({ number: p.number, value: p.value }))
+      });
+    });
+    
+    const sel = document.getElementById('projectSelect');
+    sel.innerHTML = '<option value="">-- Select Project --</option>';
+    projectsData.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = `${p.name} (${p.number})`;
+      sel.appendChild(opt);
+    });
+  } catch (err) {
+    console.warn('Could not load projects:', err.message);
+  }
+}
+
+function loadPOs() {
+  const projId = document.getElementById('projectSelect').value;
+  const poSel = document.getElementById('poSelect');
+  poSel.innerHTML = '<option value="">-- Select PO --</option>';
+  
+  if (!projId) return;
+  
+  const proj = projectsData.find(p => p.id === projId);
+  if (proj && proj.pos) {
+    proj.pos.forEach(po => {
+      const opt = document.createElement('option');
+      opt.value = po.number;
+      opt.textContent = `${po.number} - ₹${po.value.toLocaleString('en-IN')}`;
+      poSel.appendChild(opt);
+    });
+  }
+}
+
+function addAllocation() {
+  const projId = document.getElementById('projectSelect').value;
+  const poNum = document.getElementById('poSelect').value;
+  const amount = parseFloat(document.getElementById('allocationAmount').value) || 0;
+  
+  if (!projId || !poNum || amount <= 0) {
+    showToast('Please fill all fields', 'error');
+    return;
+  }
+  
+  const proj = projectsData.find(p => p.id === projId);
+  
+  tempAllocations.push({
+    id: Date.now().toString(),
+    customer: currentCustomer.customerName,
+    project: proj.name,
+    po: poNum,
+    amount: amount
+  });
+  
+  document.getElementById('projectSelect').value = '';
+  document.getElementById('poSelect').value = '';
+  document.getElementById('allocationAmount').value = '';
+  updateAllocationsList();
+}
+
+function updateAllocationsList() {
+  const div = document.getElementById('allocationsList');
+  if (tempAllocations.length === 0) {
+    div.innerHTML = '<div style="color: var(--t2); text-align: center; font-size: 11px;">No allocations yet</div>';
+    return;
+  }
+  
+  div.innerHTML = tempAllocations.map(a => `
+    <div style="background: #fff; padding: 8px; margin-bottom: 6px; border-radius: 4px; border-left: 3px solid var(--p);">
+      <div style="font-weight: 500; font-size: 12px;">${a.project}</div>
+      <div style="font-size: 11px; color: var(--t2);">PO: ${a.po}</div>
+      <div style="font-weight: 600; color: var(--p);">₹${a.amount.toLocaleString('en-IN')}</div>
+    </div>
+  `).join('');
+}
+
+function saveAllocations() {
+  allocationsData = allocationsData.filter(a => a.customer !== currentCustomer.customerName);
+  allocationsData.push(...tempAllocations);
+  
+  saveToLocalStorage();
+  closeModal('linkModal');
+  updateAllTabs();
+  showToast('✅ Allocations saved', 'success');
+}
+
+function openCommitmentModal(allocId) {
+  currentAllocationId = allocId;
+  const alloc = allocationsData.find(a => a.id === allocId);
+  const commit = commitmentsData.find(c => c.allocationId === allocId);
+  
+  if (!alloc) return;
+  
+  document.getElementById('commitCustomer').value = alloc.customer;
+  document.getElementById('commitProject').value = alloc.project;
+  document.getElementById('commitPO').value = alloc.po;
+  document.getElementById('commitAmount').value = `₹${alloc.amount.toLocaleString('en-IN')}`;
+  
+  if (commit) {
+    document.getElementById('assignedTo').value = commit.assignedTo;
+    document.getElementById('commitDate').value = commit.date;
+    document.getElementById('collectedAmount').value = commit.collected || 0;
+  } else {
+    document.getElementById('assignedTo').value = '';
+    document.getElementById('commitDate').value = '';
+    document.getElementById('collectedAmount').value = '';
+  }
+  
+  document.getElementById('commitmentModal').classList.add('active');
+}
+
+function saveCommitment() {
+  const assigned = document.getElementById('assignedTo').value;
+  const date = document.getElementById('commitDate').value;
+  const collected = parseFloat(document.getElementById('collectedAmount').value) || 0;
+  
+  if (!assigned || !date) {
+    showToast('Please fill all required fields', 'error');
+    return;
+  }
+  
+  const alloc = allocationsData.find(a => a.id === currentAllocationId);
+  
+  commitmentsData = commitmentsData.filter(c => c.allocationId !== currentAllocationId);
+  
+  commitmentsData.push({
+    id: Date.now().toString(),
+    allocationId: currentAllocationId,
+    customer: alloc.customer,
+    amount: alloc.amount,
+    assignedTo: assigned,
+    date: date,
+    collected: collected
+  });
+  
+  saveToLocalStorage();
+  closeModal('commitmentModal');
+  updateAllTabs();
+  showToast('✅ Commitment saved', 'success');
+}
+
+// Modal Management
+function closeModal(modalId) {
+  document.getElementById(modalId).classList.remove('active');
+}
+
+// Local Storage
+function saveToLocalStorage() {
+  localStorage.setItem('debt_csv', JSON.stringify(csvData));
+  localStorage.setItem('debt_allocations', JSON.stringify(allocationsData));
+  localStorage.setItem('debt_commitments', JSON.stringify(commitmentsData));
+}
+
+function loadFromLocalStorage() {
+  csvData = JSON.parse(localStorage.getItem('debt_csv') || '[]');
+  allocationsData = JSON.parse(localStorage.getItem('debt_allocations') || '[]');
+  commitmentsData = JSON.parse(localStorage.getItem('debt_commitments') || '[]');
+}
+
+// Toast
+function showToast(msg, type = 'success') {
+  const toast = document.createElement('div');
+  toast.className = `toast ${type === 'error' ? 'error' : ''}`;
+  toast.textContent = msg;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 3000);
+}
+
+// Initialize
+loadFromLocalStorage();
+updateAllTabs();
+loadProjects();
+</script>
+
+</body>
+</html>
