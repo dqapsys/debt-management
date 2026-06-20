@@ -422,7 +422,6 @@
     <button class="tab-btn" onclick="switchTab('linking')">🔗 Link Projects</button>
     <button class="tab-btn" onclick="switchTab('commitments')">📅 Commitments</button>
     <button class="tab-btn" onclick="switchTab('leaderboard')">🏆 Leaderboard</button>
-    <button class="tab-btn" id="adminTabBtn" style="display: none;" onclick="switchTab('admin')">👥 Admin</button>
   </div>
   
   <!-- Upload Tab -->
@@ -556,55 +555,6 @@
         <div class="empty-icon">🏆</div>
         <div style="font-weight: 600; margin-bottom: 5px;">No commitments yet</div>
         <div style="font-size: 12px;">Create commitments to see team performance</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Admin Tab (Updesh & Pratim Only) -->
-  <div id="admin" class="tab-content">
-    <div class="card">
-      <h3>👥 User Management</h3>
-      <p style="color: var(--t2); font-size: 12px; margin-bottom: 20px;">Create and manage user accounts, passwords, and access rights</p>
-      
-      <div style="margin-bottom: 20px; padding: 15px; background: var(--pl); border-radius: 8px;">
-        <h4 style="margin-bottom: 12px; font-size: 14px;">➕ Create New User</h4>
-        
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
-          <div class="form-group" style="margin: 0;">
-            <label>Username</label>
-            <input type="text" id="newUsername" placeholder="e.g. dev, ravi, jawed">
-          </div>
-          
-          <div class="form-group" style="margin: 0;">
-            <label>Password</label>
-            <input type="password" id="newPassword" placeholder="••••••••">
-          </div>
-        </div>
-        
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px;">
-          <div class="form-group" style="margin: 0;">
-            <label>Full Name</label>
-            <input type="text" id="newFullName" placeholder="Full Name">
-          </div>
-          
-          <div class="form-group" style="margin: 0;">
-            <label>Role</label>
-            <select id="newRole">
-              <option value="">-- Select Role --</option>
-              <option value="admin">Admin</option>
-              <option value="csv_uploader">CSV Uploader</option>
-              <option value="collections">Collections</option>
-              <option value="sales">Sales</option>
-            </select>
-          </div>
-        </div>
-        
-        <button class="btn primary" onclick="createNewUser()" style="width: 100%;">✚ Create User</button>
-      </div>
-      
-      <h4 style="margin-top: 20px; margin-bottom: 12px; font-size: 14px;">📋 Existing Users</h4>
-      <div id="usersList" style="max-height: 500px; overflow-y: auto;">
-        <!-- Users will be listed here -->
       </div>
     </div>
   </div>
@@ -775,10 +725,8 @@
     
     <div id="loginError" style="display: none; background: #FFEBEE; color: #C00; padding: 12px; border-radius: 6px; font-size: 12px; margin-bottom: 12px; text-align: center;"></div>
     
-    <div style="text-align: center; font-size: 11px; color: #999; line-height: 1.6;">
-      Demo Credentials:<br>
-      dev/dev123 • ravi/ravi123 • jawed/jawed123 • chetan/chetan123<br>
-      pratim/pratim123 • updesh/updesh123
+    <div style="text-align: center; font-size: 12px; color: #999;">
+      Wiki session auto-detected • Standalone: enter any team name
     </div>
   </div>
 </div>
@@ -959,9 +907,6 @@ async function autoLoginFromWiki(session) {
       
       showToast(`👋 Welcome, ${displayName}!`, 'success');
       
-      // Show Admin tab if user is Updesh or Pratim
-      showAdminTabIfEligible();
-      
       console.log('✅ Auto-logged in from Wiki:', username, '| Role:', currentUserRole);
     } else {
       console.warn('⚠️ User not found in dqap_users:', username);
@@ -1001,9 +946,6 @@ function autoLoginStandalone(username) {
   setTimeout(checkNotifications, 500);
   
   showToast(`👋 Welcome, ${username}!`, 'success');
-  
-  // Show Admin tab if user is Updesh or Pratim
-  showAdminTabIfEligible();
   
   console.log('✅ Auto-logged in (standalone):', username);
 }
@@ -1417,15 +1359,6 @@ async function openLinkModal(customerName) {
   await loadProjects();
   updateAllocationsList();
   document.getElementById('linkModal').classList.add('active');
-  
-  // Add ESC key handler to close without saving
-  const linkModalElement = document.getElementById('linkModal');
-  linkModalElement.onkeydown = function(e) {
-    if (e.key === 'Escape') {
-      closeModalWithoutSaving('linkModal');
-    }
-  };
-  linkModalElement.focus();
 }
 
 async function loadProjects() {
@@ -1684,13 +1617,6 @@ function closeModal(modalId) {
   document.getElementById(modalId).classList.remove('active');
 }
 
-function closeModalWithoutSaving(modalId) {
-  // Close without saving - discard tempAllocations
-  tempAllocations = [];
-  document.getElementById(modalId).classList.remove('active');
-  showToast('❌ Changes discarded', 'info');
-}
-
 // Local Storage
 function saveToLocalStorage() {
   localStorage.setItem('debt_csv', JSON.stringify(csvData));
@@ -1716,7 +1642,6 @@ function handleLogin(event) {
   }
   // Clear form
   document.getElementById('loginEmail').value = '';
-  document.getElementById('loginPassword').value = '';
   document.getElementById('loginError').style.display = 'none';
   standaloneLogin(username);
 }
@@ -1745,7 +1670,7 @@ function handleLogout() {
 function updateUserInfo() {
   if (!currentUserData) return;
   
-  const name = currentUserData.name || currentUser.email.split('@')[0];
+  const name = currentUserData.name || currentUser;
   const roleEmoji = getRoleEmoji(currentUserRole);
   
   document.getElementById('currentUser').innerHTML = `
@@ -1959,130 +1884,6 @@ function saveToLocalStorage() {
     }
   }
 }
-
-// ═══ ADMIN USER MANAGEMENT ═══
-
-let usersData = [];
-
-function loadUsers() {
-  const saved = localStorage.getItem('debt_users');
-  if (saved) {
-    usersData = JSON.parse(saved);
-  } else {
-    // Initialize with default users
-    usersData = [
-      { username: 'dev', password: 'dev123', fullName: 'Dev', role: 'csv_uploader' },
-      { username: 'ravi', password: 'ravi123', fullName: 'Ravi', role: 'collections' },
-      { username: 'jawed', password: 'jawed123', fullName: 'Jawed', role: 'collections' },
-      { username: 'chetan', password: 'chetan123', fullName: 'Chetan', role: 'sales' },
-      { username: 'keshav', password: 'keshav123', fullName: 'Keshav', role: 'admin' },
-      { username: 'pratim', password: 'pratim123', fullName: 'Pratim', role: 'admin' },
-      { username: 'updesh', password: 'updesh123', fullName: 'Updesh', role: 'admin' }
-    ];
-    saveUsers();
-  }
-  renderUsersList();
-}
-
-function saveUsers() {
-  localStorage.setItem('debt_users', JSON.stringify(usersData));
-}
-
-function showAdminTabIfEligible() {
-  if (currentUser === 'updesh' || currentUser === 'pratim') {
-    document.getElementById('adminTabBtn').style.display = 'inline-block';
-  } else {
-    document.getElementById('adminTabBtn').style.display = 'none';
-  }
-}
-
-function createNewUser() {
-  const username = document.getElementById('newUsername').value.trim();
-  const password = document.getElementById('newPassword').value;
-  const fullName = document.getElementById('newFullName').value.trim();
-  const role = document.getElementById('newRole').value;
-  
-  if (!username || !password || !fullName || !role) {
-    showToast('❌ Please fill all fields', 'error');
-    return;
-  }
-  
-  if (usersData.find(u => u.username === username)) {
-    showToast('❌ Username already exists', 'error');
-    return;
-  }
-  
-  usersData.push({
-    username: username,
-    password: password,
-    fullName: fullName,
-    role: role
-  });
-  
-  saveUsers();
-  document.getElementById('newUsername').value = '';
-  document.getElementById('newPassword').value = '';
-  document.getElementById('newFullName').value = '';
-  document.getElementById('newRole').value = '';
-  
-  showToast(`✅ User "${fullName}" created successfully`, 'success');
-  renderUsersList();
-}
-
-function editUserPassword(username) {
-  const newPassword = prompt(`Enter new password for ${username}:`);
-  if (!newPassword) return;
-  
-  const user = usersData.find(u => u.username === username);
-  if (user) {
-    user.password = newPassword;
-    saveUsers();
-    showToast(`✅ Password updated for ${username}`, 'success');
-    renderUsersList();
-  }
-}
-
-function deleteUser(username) {
-  if (!confirm(`Delete user "${username}"? This cannot be undone.`)) return;
-  
-  usersData = usersData.filter(u => u.username !== username);
-  saveUsers();
-  showToast(`✅ User "${username}" deleted`, 'success');
-  renderUsersList();
-}
-
-function renderUsersList() {
-  const div = document.getElementById('usersList');
-  if (!usersData || usersData.length === 0) {
-    div.innerHTML = '<div style="color: var(--t2); text-align: center;">No users yet</div>';
-    return;
-  }
-  
-  div.innerHTML = usersData.map(user => `
-    <div style="background: white; border: 0.5px solid var(--bd); border-radius: 8px; padding: 12px; margin-bottom: 8px;">
-      <div style="display: flex; justify-content: space-between; align-items: start;">
-        <div style="flex: 1;">
-          <div style="font-weight: 600; color: var(--p);">${user.fullName}</div>
-          <div style="font-size: 11px; color: var(--t2); margin-top: 4px;">
-            Username: <code style="background: #f0f0f0; padding: 2px 6px; border-radius: 3px;">${user.username}</code>
-          </div>
-          <div style="font-size: 11px; color: var(--t2); margin-top: 2px;">
-            Role: <span style="background: var(--pl); padding: 2px 8px; border-radius: 3px; color: var(--p);">${user.role}</span>
-          </div>
-        </div>
-        <div style="display: flex; gap: 6px;">
-          <button class="btn sm" onclick="editUserPassword('${user.username}')" style="background: #fff3cd; color: #856404; border: 1px solid #ffeaa7;">🔑 Password</button>
-          <button class="btn sm" onclick="deleteUser('${user.username}')" style="background: #ffebee; color: #c00; border: 1px solid #ffcdd2;">✕ Delete</button>
-        </div>
-      </div>
-    </div>
-  `).join('');
-}
-
-// Initialize Users on app start
-loadUsers();
-
-// ═══ END ADMIN SECTION ═══
 
 // Initialize
 // Start the app when page loads
