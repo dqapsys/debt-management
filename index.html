@@ -712,7 +712,12 @@ function parseCSV() {
       if (cells.length < 5) continue;
       
       const customer = cells[0].trim();
-      if (!customer || customer.length < 2 || !/[a-zA-Z]/.test(customer) || customer.includes('TOTAL')) continue;
+      
+      // Skip invalid/summary rows
+      if (!customer || customer.length < 2) continue;
+      if (!/[a-zA-Z]/.test(customer)) continue;
+      if (customer.toUpperCase().includes('TOTAL') || customer.toUpperCase().includes('GRAND')) continue;
+      if (customer.match(/^[,\s]+$/)) continue;
       
       const outstanding = parseIndianNumber(cells[4]);
       if (outstanding <= 0) continue;
@@ -800,8 +805,27 @@ function updateSummary() {
   tbody.innerHTML = csvData.map(customer => {
     const allocated = allocationsData.filter(a => a.customer === customer.customerName).reduce((s, a) => s + a.amount, 0);
     const committed = commitmentsData.filter(c => c.customer === customer.customerName).reduce((s, c) => s + c.amount, 0);
-    const status = committed > 0 ? 'success' : (allocated > 0 ? 'warning' : 'pending');
-    const statusText = committed > 0 ? '✓ Committed' : (allocated > 0 ? 'Partial' : 'Pending');
+    const collected = commitmentsData.filter(c => c.customer === customer.customerName).reduce((s, c) => s + (c.collected || 0), 0);
+    
+    // Status based on actual collection progress
+    let status = 'pending';
+    let statusText = 'Pending';
+    
+    if (committed > 0) {
+      if (collected >= committed) {
+        status = 'success';
+        statusText = '✓ Collected';
+      } else if (collected > 0) {
+        status = 'warning';
+        statusText = `Partial (₹${collected.toLocaleString('en-IN')})`;
+      } else {
+        status = 'pending';
+        statusText = 'Committed';
+      }
+    } else if (allocated > 0) {
+      status = 'warning';
+      statusText = 'Allocated';
+    }
     
     return `
       <tr>
@@ -891,17 +915,30 @@ function updateLeaderboard() {
     stats[u] = { name: u, count: 0, committed: 0, collected: 0 };
   });
   
+  // Sum up commitments by user - only count COMMITTED amounts
   commitmentsData.forEach(c => {
     if (stats[c.assignedTo]) {
       stats[c.assignedTo].count++;
-      stats[c.assignedTo].committed += c.amount;
-      stats[c.assignedTo].collected += c.collected || 0;
+      stats[c.assignedTo].committed += c.amount;  // Committed = allocated amount promised
+      stats[c.assignedTo].collected += c.collected || 0;  // Collected = actual received amount
     }
   });
   
   const sorted = Object.values(stats).filter(s => s.count > 0).sort((a, b) => b.collected - a.collected);
   
+  if (sorted.length === 0) {
+    container.innerHTML = `
+      <div class="empty">
+        <div class="empty-icon">🏆</div>
+        <div style="font-weight: 600; margin-bottom: 5px;">No assignments yet</div>
+        <div style="font-size: 12px;">Assign commitments to team members</div>
+      </div>
+    `;
+    return;
+  }
+  
   container.innerHTML = sorted.map((user, idx) => {
+    // Performance = (Actual Collected / Committed Amount) * 100
     const perf = user.committed > 0 ? Math.round((user.collected / user.committed) * 100) : 0;
     const medal = idx === 0 ? '🥇' : (idx === 1 ? '🥈' : (idx === 2 ? '🥉' : ''));
     
@@ -910,7 +947,7 @@ function updateLeaderboard() {
         <div class="leaderboard-rank">${medal}</div>
         <div class="leaderboard-user">
           <div class="leaderboard-name">#${idx + 1} ${user.name}</div>
-          <div style="font-size: 11px; color: var(--t2);">Performance: ${perf}%</div>
+          <div style="font-size: 11px; color: var(--t2);">Collection Performance: ${perf}% (Collected ÷ Committed)</div>
         </div>
         <div class="leaderboard-stats">
           <div class="stat-item">
@@ -923,7 +960,7 @@ function updateLeaderboard() {
           </div>
           <div class="stat-item">
             <div class="stat-item-label">Collected</div>
-            <div class="stat-item-value">₹${(user.collected/100000).toFixed(1)}L</div>
+            <div class="stat-item-value" style="color: #3F704D;">₹${(user.collected/100000).toFixed(1)}L</div>
           </div>
         </div>
       </div>
@@ -1057,13 +1094,22 @@ function updateAllocationsList() {
     return;
   }
   
-  div.innerHTML = tempAllocations.map(a => `
-    <div style="background: #fff; padding: 8px; margin-bottom: 6px; border-radius: 4px; border-left: 3px solid var(--p);">
-      <div style="font-weight: 500; font-size: 12px;">${a.project}</div>
-      <div style="font-size: 11px; color: var(--t2);">PO: ${a.po}</div>
-      <div style="font-weight: 600; color: var(--p);">₹${a.amount.toLocaleString('en-IN')}</div>
+  div.innerHTML = tempAllocations.map((a, idx) => `
+    <div style="background: #fff; padding: 10px; margin-bottom: 8px; border-radius: 4px; border-left: 3px solid var(--p); display: flex; justify-content: space-between; align-items: center;">
+      <div style="flex: 1;">
+        <div style="font-weight: 500; font-size: 12px;">${a.project}</div>
+        <div style="font-size: 11px; color: var(--t2);">PO: ${a.po}</div>
+        <div style="font-weight: 600; color: var(--p); margin-top: 4px;">₹${a.amount.toLocaleString('en-IN')}</div>
+      </div>
+      <button class="btn sm" onclick="deleteAllocation(${idx})" style="background: #ffebee; color: #c00; border-color: #ffcdd2; margin-left: 10px;">✕ Delete</button>
     </div>
   `).join('');
+}
+
+function deleteAllocation(idx) {
+  tempAllocations.splice(idx, 1);
+  updateAllocationsList();
+  showToast('Allocation deleted', 'success');
 }
 
 function saveAllocations() {
