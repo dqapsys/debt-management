@@ -521,12 +521,13 @@
             <th style="text-align: right;">Amount</th>
             <th>Assigned</th>
             <th>Date</th>
+            <th style="text-align: center;">Collected</th>
             <th>Status</th>
             <th>Action</th>
           </tr>
         </thead>
         <tbody id="commitmentsTable">
-          <tr><td colspan="8" style="text-align: center; color: var(--t2);">No commitments yet</td></tr>
+          <tr><td colspan="9" style="text-align: center; color: var(--t2);">No commitments yet</td></tr>
         </tbody>
       </table>
     </div>
@@ -645,14 +646,46 @@
       <input type="date" id="commitDate">
     </div>
     
-    <div class="form-group">
-      <label>Expected Collected Amount (₹)</label>
-      <input type="number" id="collectedAmount" placeholder="0" min="0" step="0.01">
+    <div class="form-group" style="background: #E4F1FA; padding: 12px; border-radius: 4px; margin-bottom: 15px;">
+      <div style="font-size: 11px; color: var(--t2); margin-bottom: 6px;">ℹ️ Committed Amount</div>
+      <div style="font-size: 18px; font-weight: 600; color: var(--p);">₹<span id="commitAmountDisplay">0</span></div>
+      <div style="font-size: 10px; color: var(--t2); margin-top: 4px;">Enter collection details after receiving payment</div>
     </div>
     
     <div style="display: flex; gap: 8px;">
       <button class="btn" onclick="closeModal('commitmentModal')" style="flex: 1;">Cancel</button>
       <button class="btn primary" onclick="saveCommitment()" style="flex: 1;">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ RECORD COLLECTION MODAL ══ -->
+<div id="collectionModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <div class="modal-title">Record Collection</div>
+      <button class="modal-close" onclick="closeModal('collectionModal')">✕</button>
+    </div>
+    <div style="padding: 15px; border-bottom: 1px solid var(--b); background: var(--pl); margin-bottom: 15px;">
+      <div style="font-size: 10px; color: var(--t2); margin-bottom: 4px;">CUSTOMER</div>
+      <div style="font-size: 16px; font-weight: 600;" id="colCustomer">—</div>
+      <div style="font-size: 10px; color: var(--t2); margin-top: 8px; margin-bottom: 4px;">COMMITTED AMOUNT</div>
+      <div style="font-size: 14px; font-weight: 600; color: var(--p);">₹<span id="colAmount">0</span></div>
+    </div>
+    
+    <div class="form-group">
+      <label>Amount Collected (₹) *</label>
+      <input type="number" id="collectedAmountInput" placeholder="0" min="0" step="0.01">
+    </div>
+    
+    <div class="form-group">
+      <label>Collection Date *</label>
+      <input type="date" id="collectionDateInput" required>
+    </div>
+    
+    <div style="display: flex; gap: 8px;">
+      <button class="btn" onclick="closeModal('collectionModal')" style="flex: 1;">Cancel</button>
+      <button class="btn primary" onclick="saveCollection()" style="flex: 1;">✓ Record</button>
     </div>
   </div>
 </div>
@@ -804,12 +837,14 @@ function updateSummary() {
   const tbody = document.getElementById('summaryTable');
   tbody.innerHTML = csvData.map(customer => {
     const allocated = allocationsData.filter(a => a.customer === customer.customerName).reduce((s, a) => s + a.amount, 0);
-    const committed = commitmentsData.filter(c => c.customer === customer.customerName).reduce((s, c) => s + c.amount, 0);
-    const collected = commitmentsData.filter(c => c.customer === customer.customerName).reduce((s, c) => s + (c.collected || 0), 0);
+    const commitments = commitmentsData.filter(c => c.customer === customer.customerName);
+    const committed = commitments.reduce((s, c) => s + c.amount, 0);
+    const collected = commitments.reduce((s, c) => s + (c.collected || 0), 0);
     
-    // Status based on actual collection progress
+    // Status based on actual collection progress and dates
     let status = 'pending';
     let statusText = 'Pending';
+    const today = new Date().toISOString().split('T')[0];
     
     if (committed > 0) {
       if (collected >= committed) {
@@ -819,8 +854,17 @@ function updateSummary() {
         status = 'warning';
         statusText = `Partial (₹${collected.toLocaleString('en-IN')})`;
       } else {
-        status = 'pending';
-        statusText = 'Committed';
+        // Check if delayed
+        const latestCommitDate = Math.max(...commitments.map(c => new Date(c.commitDate).getTime()));
+        const isDelayed = today > commitments[0].commitDate;
+        
+        if (isDelayed) {
+          status = 'error';
+          statusText = '⚠️ Delayed';
+        } else {
+          status = 'pending';
+          statusText = 'Committed';
+        }
       }
     } else if (allocated > 0) {
       status = 'warning';
@@ -868,16 +912,36 @@ function updateLinking() {
 function updateCommitments() {
   const tbody = document.getElementById('commitmentsTable');
   if (allocationsData.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; color: var(--t2);">No allocations yet</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: var(--t2);">No allocations yet</td></tr>';
     return;
   }
   
   tbody.innerHTML = allocationsData.map(alloc => {
     const commit = commitmentsData.find(c => c.allocationId === alloc.id);
-    const status = commit ? 'success' : 'pending';
-    const statusText = commit ? '✓ Committed' : 'Pending';
+    
+    let status = 'pending';
+    let statusText = 'Pending';
+    
+    if (commit) {
+      const today = new Date().toISOString().split('T')[0];
+      if (commit.collected >= commit.amount) {
+        status = 'success';
+        statusText = '✓ Collected';
+      } else if (commit.collected > 0) {
+        status = 'warning';
+        statusText = `Partial`;
+      } else if (today > commit.commitDate) {
+        status = 'error';
+        statusText = '⚠️ Delayed';
+      } else {
+        status = 'success';
+        statusText = 'Committed';
+      }
+    }
+    
     const assigned = commit ? commit.assignedTo : '-';
-    const date = commit ? new Date(commit.date).toLocaleDateString('en-IN') : '-';
+    const commitDate = commit ? new Date(commit.commitDate).toLocaleDateString('en-IN') : '-';
+    const collected = commit ? `₹${commit.collected.toLocaleString('en-IN')}` : '-';
     
     return `
       <tr>
@@ -886,9 +950,14 @@ function updateCommitments() {
         <td>${alloc.po}</td>
         <td style="text-align: right;">₹${alloc.amount.toLocaleString('en-IN')}</td>
         <td>${assigned}</td>
-        <td>${date}</td>
+        <td>${commitDate}</td>
+        <td style="text-align: center;">${collected}</td>
         <td><span class="badge ${status}">${statusText}</span></td>
-        <td><button class="btn sm primary" onclick="openCommitmentModal('${alloc.id}')">${commit ? 'Edit' : 'Set'}</button></td>
+        <td style="white-space: nowrap;">
+          <button class="btn sm" onclick="openCommitmentModal('${alloc.id}')" style="margin-right: 4px;">${commit ? 'Edit' : 'Set'}</button>
+          ${commit ? `<button class="btn sm primary" onclick="openCollectionModal('${commit.id}')" style="margin-right: 4px;">💰 Record</button>` : ''}
+          ${commit ? `<button class="btn sm" onclick="deleteCommitment('${commit.id}')" style="background: #ffebee; color: #c00; border-color: #ffcdd2;">✕</button>` : ''}
+        </td>
       </tr>
     `;
   }).join('');
@@ -1133,15 +1202,14 @@ function openCommitmentModal(allocId) {
   document.getElementById('commitProject').value = alloc.project;
   document.getElementById('commitPO').value = alloc.po;
   document.getElementById('commitAmount').value = `₹${alloc.amount.toLocaleString('en-IN')}`;
+  document.getElementById('commitAmountDisplay').textContent = alloc.amount.toLocaleString('en-IN');
   
   if (commit) {
     document.getElementById('assignedTo').value = commit.assignedTo;
-    document.getElementById('commitDate').value = commit.date;
-    document.getElementById('collectedAmount').value = commit.collected || 0;
+    document.getElementById('commitDate').value = commit.commitDate;
   } else {
     document.getElementById('assignedTo').value = '';
     document.getElementById('commitDate').value = '';
-    document.getElementById('collectedAmount').value = '';
   }
   
   document.getElementById('commitmentModal').classList.add('active');
@@ -1150,7 +1218,6 @@ function openCommitmentModal(allocId) {
 function saveCommitment() {
   const assigned = document.getElementById('assignedTo').value;
   const date = document.getElementById('commitDate').value;
-  const collected = parseFloat(document.getElementById('collectedAmount').value) || 0;
   
   if (!assigned || !date) {
     showToast('Please fill all required fields', 'error');
@@ -1167,8 +1234,9 @@ function saveCommitment() {
     customer: alloc.customer,
     amount: alloc.amount,
     assignedTo: assigned,
-    date: date,
-    collected: collected  // Always 0 initially, user updates later
+    commitDate: date,
+    collected: 0,  // Always 0 initially
+    collectionDate: null  // To be filled when payment received
   };
   
   commitmentsData.push(newCommit);
@@ -1176,7 +1244,7 @@ function saveCommitment() {
   console.log('✅ Commitment saved:', {
     customer: newCommit.customer,
     amount: newCommit.amount,
-    collected: newCommit.collected,
+    commitDate: newCommit.commitDate,
     assignedTo: newCommit.assignedTo
   });
   
@@ -1186,7 +1254,62 @@ function saveCommitment() {
   showToast('✅ Commitment saved', 'success');
 }
 
-// Modal Management
+function openCollectionModal(commitmentId) {
+  const commit = commitmentsData.find(c => c.id === commitmentId);
+  if (!commit) return;
+  
+  currentCommitmentId = commitmentId;
+  document.getElementById('colCustomer').textContent = commit.customer;
+  document.getElementById('colAmount').textContent = commit.amount.toLocaleString('en-IN');
+  document.getElementById('collectedAmountInput').value = commit.collected || 0;
+  document.getElementById('collectionDateInput').value = commit.collectionDate || '';
+  document.getElementById('collectionModal').classList.add('active');
+}
+
+function saveCollection() {
+  const collectedAmt = parseFloat(document.getElementById('collectedAmountInput').value) || 0;
+  const collectionDate = document.getElementById('collectionDateInput').value;
+  
+  if (!collectionDate) {
+    showToast('Please enter collection date', 'error');
+    return;
+  }
+  
+  const commit = commitmentsData.find(c => c.id === currentCommitmentId);
+  if (!commit) return;
+  
+  if (collectedAmt > commit.amount) {
+    showToast('Collected amount cannot exceed committed amount', 'error');
+    return;
+  }
+  
+  commit.collected = collectedAmt;
+  commit.collectionDate = collectionDate;
+  
+  console.log('✅ Collection recorded:', {
+    customer: commit.customer,
+    committed: commit.amount,
+    collected: collectedAmt,
+    date: collectionDate
+  });
+  
+  saveToLocalStorage();
+  closeModal('collectionModal');
+  updateAllTabs();
+  showToast('✅ Collection recorded', 'success');
+}
+
+function deleteCommitment(commitmentId) {
+  if (!confirm('Delete this commitment?')) return;
+  
+  commitmentsData = commitmentsData.filter(c => c.id !== commitmentId);
+  
+  console.log('🗑️ Commitment deleted');
+  
+  saveToLocalStorage();
+  updateAllTabs();
+  showToast('✅ Commitment deleted', 'success');
+}
 function closeModal(modalId) {
   document.getElementById(modalId).classList.remove('active');
 }
