@@ -966,6 +966,15 @@ function updateCommitments() {
 function updateLeaderboard() {
   const container = document.getElementById('leaderboardContent');
   
+  // Validate commitments - remove orphaned entries (no matching allocation)
+  commitmentsData = commitmentsData.filter(c => {
+    const hasAllocation = allocationsData.some(a => a.id === c.allocationId);
+    if (!hasAllocation) {
+      console.warn('⚠️ Removing orphaned commitment:', c);
+    }
+    return hasAllocation;
+  });
+  
   if (commitmentsData.length === 0) {
     container.innerHTML = `
       <div class="empty">
@@ -1035,6 +1044,9 @@ function updateLeaderboard() {
       </div>
     `;
   }).join('');
+  
+  // Save cleaned data back to localStorage
+  saveToLocalStorage();
 }
 
 // Modal Functions
