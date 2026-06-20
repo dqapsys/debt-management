@@ -653,11 +653,7 @@
     <div class="form-group">
       <label>Assigned To *</label>
       <select id="assignedTo">
-        <option value="">-- Select User --</option>
-        <option value="Ravi">Ravi - Field Collections</option>
-        <option value="Jawed">Jawed - Follow-up</option>
-        <option value="Chetan">Chetan - Sales</option>
-        <option value="Keshav">Keshav - Admin</option>
+        <option value="">-- Loading Wiki users --</option>
       </select>
     </div>
     
@@ -826,7 +822,7 @@ let currentUserRole = null;
 let currentUserData = null;
 let wikiSession = null;
 let authInitialized = false;
-const DEBT_BUILD = '20260620.4';
+const DEBT_BUILD = '20260620.5';
 
 // ══ WIKI-INTEGRATED AUTHENTICATION ══
 // Check for Wiki session or fallback to standalone mode
@@ -947,6 +943,7 @@ let csvData = [];
 let allocationsData = [];
 let commitmentsData = [];
 let projectsData = [];
+let wikiUsers = [];
 let currentCustomer = null;
 let tempAllocations = [];
 let currentAllocationId = null;
@@ -1226,20 +1223,16 @@ function updateLeaderboard() {
     return;
   }
   
-  const users = ['Ravi', 'Jawed', 'Chetan', 'Keshav'];
   const stats = {};
-  
-  users.forEach(u => {
-    stats[u] = { name: u, count: 0, committed: 0, collected: 0 };
-  });
-  
+
   // Sum up commitments by user - only count COMMITTED amounts
   commitmentsData.forEach(c => {
-    if (stats[c.assignedTo]) {
-      stats[c.assignedTo].count++;
-      stats[c.assignedTo].committed += c.amount;  // Committed = allocated amount promised
-      stats[c.assignedTo].collected += c.collected || 0;  // Collected = actual received amount
-    }
+    const key = c.assignedUsername || c.assignedTo;
+    if (!key) return;
+    if (!stats[key]) stats[key] = { name: c.assignedTo || key, count: 0, committed: 0, collected: 0 };
+    stats[key].count++;
+    stats[key].committed += c.amount;
+    stats[key].collected += c.collected || 0;
   });
   
   const sorted = Object.values(stats).filter(s => s.count > 0).sort((a, b) => b.collected - a.collected);
@@ -1457,7 +1450,61 @@ function saveAllocations() {
   showToast('✅ Allocations saved', 'success');
 }
 
-function openCommitmentModal(allocId) {
+async function loadWikiUsers(selectedCommitment = null) {
+  const select = document.getElementById('assignedTo');
+  if (!select) return;
+
+  select.innerHTML = '<option value="">-- Loading Wiki users --</option>';
+
+  try {
+    const snapshot = await db.collection('dqap_users').get();
+    wikiUsers = snapshot.docs
+      .map(doc => {
+        const data = doc.data();
+        return {
+          username: String(data.username || '').trim(),
+          fullName: String(data.fullName || data.displayName || data.username || '').trim(),
+          role: data.role || (data.isAdmin ? 'admin' : 'user'),
+          active: data.active !== false && data.disabled !== true
+        };
+      })
+      .filter(user => user.username && user.active)
+      .sort((a, b) => a.fullName.localeCompare(b.fullName));
+
+    select.innerHTML = '<option value="">-- Select Wiki User --</option>';
+    wikiUsers.forEach(user => {
+      const option = document.createElement('option');
+      option.value = user.username;
+      option.textContent = `${user.fullName} (${user.username}) — ${user.role}`;
+      option.dataset.name = user.fullName;
+      select.appendChild(option);
+    });
+
+    if (selectedCommitment) {
+      let selectedUsername = selectedCommitment.assignedUsername || '';
+      if (!selectedUsername) {
+        selectedUsername = wikiUsers.find(user => user.fullName === selectedCommitment.assignedTo)?.username || '';
+      }
+
+      if (selectedUsername && wikiUsers.some(user => user.username === selectedUsername)) {
+        select.value = selectedUsername;
+      } else if (selectedCommitment.assignedTo) {
+        const legacyOption = document.createElement('option');
+        legacyOption.value = `legacy:${selectedCommitment.assignedTo}`;
+        legacyOption.textContent = `${selectedCommitment.assignedTo} (former user)`;
+        legacyOption.dataset.name = selectedCommitment.assignedTo;
+        select.appendChild(legacyOption);
+        select.value = legacyOption.value;
+      }
+    }
+  } catch (error) {
+    console.error('Could not load Wiki users:', error);
+    select.innerHTML = '<option value="">-- Could not load Wiki users --</option>';
+    showToast('Could not load the Wiki user list', 'error');
+  }
+}
+
+async function openCommitmentModal(allocId) {
   currentAllocationId = allocId;
   const alloc = allocationsData.find(a => a.id === allocId);
   const commit = commitmentsData.find(c => c.allocationId === allocId);
@@ -1469,12 +1516,11 @@ function openCommitmentModal(allocId) {
   document.getElementById('commitPO').value = alloc.po;
   document.getElementById('commitAmount').value = `₹${alloc.amount.toLocaleString('en-IN')}`;
   document.getElementById('commitAmountDisplay').textContent = alloc.amount.toLocaleString('en-IN');
+  await loadWikiUsers(commit || null);
   
   if (commit) {
-    document.getElementById('assignedTo').value = commit.assignedTo;
     document.getElementById('commitDate').value = commit.commitDate;
   } else {
-    document.getElementById('assignedTo').value = '';
     document.getElementById('commitDate').value = '';
   }
   
@@ -1482,7 +1528,10 @@ function openCommitmentModal(allocId) {
 }
 
 function saveCommitment() {
-  const assigned = document.getElementById('assignedTo').value;
+  const assignedSelect = document.getElementById('assignedTo');
+  const selectedOption = assignedSelect.options[assignedSelect.selectedIndex];
+  const assignedUsername = assignedSelect.value.startsWith('legacy:') ? '' : assignedSelect.value;
+  const assigned = selectedOption?.dataset.name || '';
   const date = document.getElementById('commitDate').value;
   
   if (!assigned || !date) {
@@ -1500,6 +1549,7 @@ function saveCommitment() {
     customer: alloc.customer,
     amount: alloc.amount,
     assignedTo: assigned,
+    assignedUsername: assignedUsername,
     commitDate: date,
     collected: 0,  // Always 0 initially
     collectionDate: null  // To be filled when payment received
