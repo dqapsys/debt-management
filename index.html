@@ -578,6 +578,7 @@
       <select id="poSelect">
         <option value="">-- Select PO --</option>
       </select>
+      <input type="text" id="poManual" placeholder="Or type PO manually" style="margin-top: 6px; display: none;">
     </div>
     
     <div class="form-group">
@@ -957,11 +958,24 @@ async function loadProjects() {
     projectsData = [];
     snap.forEach(doc => {
       const data = doc.data();
+      let pos = [];
+      
+      // Handle different PO array structures
+      if (data.pos && Array.isArray(data.pos)) {
+        pos = data.pos.map(p => ({ 
+          number: p.number || p.poNumber || '', 
+          value: p.value || p.poValue || 0 
+        }));
+      } else if (data.poNumber) {
+        // Fallback: single PO per project
+        pos = [{ number: data.poNumber, value: data.poValue || 0 }];
+      }
+      
       projectsData.push({
         id: doc.id,
         name: data.name || '',
         number: data.number || '',
-        pos: (data.pos || []).map(p => ({ number: p.number, value: p.value }))
+        pos: pos
       });
     });
     
@@ -973,6 +987,8 @@ async function loadProjects() {
       opt.textContent = `${p.name} (${p.number})`;
       sel.appendChild(opt);
     });
+    
+    console.log('✓ Loaded projects:', projectsData);
   } catch (err) {
     console.warn('Could not load projects:', err.message);
   }
@@ -986,13 +1002,25 @@ function loadPOs() {
   if (!projId) return;
   
   const proj = projectsData.find(p => p.id === projId);
-  if (proj && proj.pos) {
+  console.log('Selected project:', proj);
+  
+  if (proj && proj.pos && proj.pos.length > 0) {
     proj.pos.forEach(po => {
       const opt = document.createElement('option');
       opt.value = po.number;
-      opt.textContent = `${po.number} - ₹${po.value.toLocaleString('en-IN')}`;
+      opt.textContent = po.value > 0 
+        ? `${po.number} - ₹${po.value.toLocaleString('en-IN')}`
+        : po.number;
       poSel.appendChild(opt);
     });
+    console.log('✓ Loaded', proj.pos.length, 'POs for project:', proj.name);
+  } else {
+    // Fallback: let user manually enter PO
+    console.warn('No POs found for project:', proj?.name, '— allowing manual entry');
+    const opt = document.createElement('option');
+    opt.value = 'manual';
+    opt.textContent = '--- Enter PO Manually ---';
+    poSel.appendChild(opt);
   }
 }
 
