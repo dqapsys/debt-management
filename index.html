@@ -278,6 +278,11 @@
       color: #E65100;
     }
     
+    .badge.error {
+      background: #FFEBEE;
+      color: #C62828;
+    }
+    
     .modal {
       display: none;
       position: fixed;
@@ -710,13 +715,8 @@
     </div>
     
     <div class="form-group">
-      <label style="display: block; font-size: 12px; font-weight: 600; color: #333; margin-bottom: 8px; text-transform: uppercase;">Email</label>
-      <input type="email" id="loginEmail" placeholder="your@email.com" style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
-    </div>
-    
-    <div class="form-group">
-      <label style="display: block; font-size: 12px; font-weight: 600; color: #333; margin-bottom: 8px; text-transform: uppercase;">Password</label>
-      <input type="password" id="loginPassword" placeholder="••••••••" style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
+      <label style="display: block; font-size: 12px; font-weight: 600; color: #333; margin-bottom: 8px; text-transform: uppercase;">Username</label>
+      <input type="text" id="loginEmail" placeholder="e.g. Dev, Ravi, Pratim" style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;">
     </div>
     
     <button class="btn primary" onclick="handleLogin()" style="width: 100%; padding: 12px; margin-bottom: 12px; background: linear-gradient(135deg, #006994, #004A68); border: none; color: #fff; font-weight: 600; cursor: pointer; border-radius: 8px;">
@@ -726,7 +726,7 @@
     <div id="loginError" style="display: none; background: #FFEBEE; color: #C00; padding: 12px; border-radius: 6px; font-size: 12px; margin-bottom: 12px; text-align: center;"></div>
     
     <div style="text-align: center; font-size: 12px; color: #999;">
-      Use your Wiki login credentials
+      Wiki session auto-detected • Standalone: enter any team name
     </div>
   </div>
 </div>
@@ -865,7 +865,8 @@ function initializeAuth() {
     if (savedUser) {
       autoLoginStandalone(savedUser);
     } else {
-      showLoginScreen();
+      // Auto-login as Dev for standalone/demo access on GitHub Pages (no wiki session)
+      autoLoginStandalone('Dev');
     }
   }
 }
@@ -1000,6 +1001,7 @@ let projectsData = [];
 let currentCustomer = null;
 let tempAllocations = [];
 let currentAllocationId = null;
+let currentCommitmentId = null;
 let csvFile = null;
 
 // Tab Switching
@@ -1632,46 +1634,17 @@ function loadFromLocalStorage() {
 // Firebase Authentication Functions
 function handleLogin(event) {
   if (event) event.preventDefault();
-  
-  const email = document.getElementById('loginEmail').value.trim();
-  const password = document.getElementById('loginPassword').value;
-  
-  if (!email || !password) {
-    showLoginError('Please enter email and password');
+  // Standalone fallback: treat email field as username (wiki session is primary auth)
+  const username = document.getElementById('loginEmail').value.trim() || 'Dev';
+  if (!username) {
+    showLoginError('Please enter username');
     return;
   }
-  
-  // Show loading state
-  const btn = document.querySelector('button[onclick="handleLogin()"]');
-  const originalText = btn.textContent;
-  btn.textContent = '⏳ Signing in...';
-  btn.disabled = true;
-  
-  auth.signInWithEmailAndPassword(email, password)
-    .then((userCredential) => {
-      // Login successful - auth state listener will handle the rest
-      document.getElementById('loginEmail').value = '';
-      document.getElementById('loginPassword').value = '';
-      document.getElementById('loginError').style.display = 'none';
-    })
-    .catch((error) => {
-      console.error('Login error:', error);
-      let message = 'Login failed. Please try again.';
-      
-      if (error.code === 'auth/user-not-found') {
-        message = 'Email not found. Check your email or contact admin.';
-      } else if (error.code === 'auth/wrong-password') {
-        message = 'Incorrect password. Please try again.';
-      } else if (error.code === 'auth/invalid-email') {
-        message = 'Invalid email format.';
-      } else if (error.code === 'auth/user-disabled') {
-        message = 'This account has been disabled.';
-      }
-      
-      showLoginError(message);
-      btn.textContent = originalText;
-      btn.disabled = false;
-    });
+  // Clear form
+  document.getElementById('loginEmail').value = '';
+  document.getElementById('loginPassword').value = '';
+  document.getElementById('loginError').style.display = 'none';
+  standaloneLogin(username);
 }
 
 function showLoginError(message) {
@@ -1682,16 +1655,16 @@ function showLoginError(message) {
 
 function handleLogout() {
   if (confirm('Are you sure you want to sign out?')) {
-    auth.signOut()
-      .then(() => {
-        clearFaviconBadge();
-        localStorage.clear();
-        showToast('👋 Signed out successfully', 'success');
-      })
-      .catch((error) => {
-        console.error('Logout error:', error);
-        showToast('Error signing out: ' + error.message, 'error');
-      });
+    currentUser = null;
+    currentUserRole = null;
+    currentUserData = null;
+    localStorage.removeItem('debt_standalone_user');
+    localStorage.removeItem('debt_csv');
+    localStorage.removeItem('debt_allocations');
+    localStorage.removeItem('debt_commitments');
+    document.getElementById('appContainer').style.display = 'none';
+    showLoginScreen();
+    showToast('👋 Signed out', 'success');
   }
 }
 
@@ -1717,6 +1690,7 @@ function getRoleEmoji(role) {
     'collections': '🏃',
     'follow_up': '📞',
     'sales': '💼',
+    'developer': '🛠️',
   };
   return emojis[role] || '👤';
 }
