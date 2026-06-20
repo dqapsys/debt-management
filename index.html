@@ -1161,14 +1161,23 @@ function saveCommitment() {
   
   commitmentsData = commitmentsData.filter(c => c.allocationId !== currentAllocationId);
   
-  commitmentsData.push({
+  const newCommit = {
     id: Date.now().toString(),
     allocationId: currentAllocationId,
     customer: alloc.customer,
     amount: alloc.amount,
     assignedTo: assigned,
     date: date,
-    collected: collected
+    collected: collected  // Always 0 initially, user updates later
+  };
+  
+  commitmentsData.push(newCommit);
+  
+  console.log('✅ Commitment saved:', {
+    customer: newCommit.customer,
+    amount: newCommit.amount,
+    collected: newCommit.collected,
+    assignedTo: newCommit.assignedTo
   });
   
   saveToLocalStorage();
