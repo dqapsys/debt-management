@@ -847,7 +847,7 @@ function initializeAuth() {
 async function autoLoginFromWiki(session) {
   try {
     const username = session.username;
-    const displayName = session.displayName || username;
+    const displayName = session.displayName || session.fullName || username;
     
     // Get user data from dqap_users collection
     const userDoc = await db.collection('dqap_users').doc(username).get();
