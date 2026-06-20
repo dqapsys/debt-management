@@ -1913,8 +1913,19 @@ function saveToLocalStorage() {
 }
 
 // Initialize
-// Auth state listener will handle everything
-// Just wait for Firebase to determine auth state
+// Start the app when page loads
+window.addEventListener('load', function() {
+  console.log('🚀 App initializing...');
+  initializeAuth();
+});
+
+// Also try immediate init in case load fires before this script
+document.addEventListener('DOMContentLoaded', function() {
+  console.log('📋 DOM ready, initializing auth...');
+  if (!currentUser) {
+    initializeAuth();
+  }
+});
 </script>
 
 </body>
