@@ -4,6 +4,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>DQAP Debt Management</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect fill='%23006994' width='64' height='64' rx='12'/%3E%3Ctext x='32' y='43' font-size='36' text-anchor='middle'%3E%F0%9F%92%B0%3C/text%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -614,8 +617,8 @@
     </div>
     
     <div style="display: flex; gap: 8px;">
-      <button class="btn" onclick="closeModal('linkModal')" style="flex: 1;">Cancel</button>
-      <button class="btn primary" onclick="saveAllocations()" style="flex: 1;">Save</button>
+      <button type="button" class="btn" onclick="closeModal('linkModal')" style="flex: 1;">Cancel</button>
+      <button type="button" class="btn primary" onclick="saveAllocations()" style="flex: 1;">Save</button>
     </div>
   </div>
 </div>
@@ -823,6 +826,7 @@ let currentUserRole = null;
 let currentUserData = null;
 let wikiSession = null;
 let authInitialized = false;
+const DEBT_BUILD = '20260620.4';
 
 // ══ WIKI-INTEGRATED AUTHENTICATION ══
 // Check for Wiki session or fallback to standalone mode
@@ -884,6 +888,18 @@ async function autoLoginFromWiki(session) {
       // Compatibility with any older records whose document ID was the username.
       const legacyUserDoc = await usersRef.doc(username).get();
       if (legacyUserDoc.exists) userData = legacyUserDoc.data();
+    }
+
+    // The Wiki already authenticated this session. Use its minimal profile if
+    // a stale deployment or a transient Firestore read returns no profile.
+    if (!userData && session.username && session.role) {
+      console.warn('User profile lookup returned no record; using the authenticated Wiki session.');
+      userData = {
+        username: session.username,
+        fullName: session.fullName || session.displayName || session.username,
+        displayName: session.displayName || session.fullName || session.username,
+        role: session.role
+      };
     }
 
     if (userData) {
@@ -989,8 +1005,8 @@ function parseCSV() {
     }
     
     csvData.sort((a, b) => b.outstanding - a.outstanding);
-    saveToLocalStorage();
     updateAllTabs();
+    saveToLocalStorage();
     showToast(`✅ Loaded ${csvData.length} customers`, 'success');
   };
   reader.readAsText(csvFile);
@@ -1418,12 +1434,26 @@ function deleteAllocation(idx) {
 }
 
 function saveAllocations() {
+  if (!currentCustomer) {
+    showToast('No customer selected', 'error');
+    return;
+  }
+
   allocationsData = allocationsData.filter(a => a.customer !== currentCustomer.customerName);
   allocationsData.push(...tempAllocations);
-  
-  saveToLocalStorage();
-  closeModal('linkModal');
+
+  try {
+    saveToLocalStorage();
+  } catch (error) {
+    console.error('Could not save allocations:', error);
+    showToast('Could not save allocations. Please try again.', 'error');
+    return;
+  }
+
   updateAllTabs();
+  closeModal('linkModal');
+  tempAllocations = [];
+  currentCustomer = null;
   showToast('✅ Allocations saved', 'success');
 }
 
@@ -1547,14 +1577,34 @@ function deleteCommitment(commitmentId) {
   showToast('✅ Commitment deleted', 'success');
 }
 function closeModal(modalId) {
-  document.getElementById(modalId).classList.remove('active');
+  const modal = document.getElementById(modalId);
+  if (modal) modal.classList.remove('active');
 }
+
+document.addEventListener('keydown', function(event) {
+  if (event.key !== 'Escape') return;
+  const linkModal = document.getElementById('linkModal');
+  if (!linkModal || !linkModal.classList.contains('active')) return;
+
+  closeModal('linkModal');
+  tempAllocations = [];
+  currentCustomer = null;
+  event.preventDefault();
+});
 
 // Local Storage
 function saveToLocalStorage() {
   localStorage.setItem('debt_csv', JSON.stringify(csvData));
   localStorage.setItem('debt_allocations', JSON.stringify(allocationsData));
   localStorage.setItem('debt_commitments', JSON.stringify(commitmentsData));
+
+  if (csvData.length > 0) {
+    const lastUploadTime = localStorage.getItem('debt_lastUploadTime');
+    if (!lastUploadTime || Date.now() - new Date(lastUploadTime).getTime() > 300000) {
+      localStorage.setItem('debt_lastUploadTime', new Date().toISOString());
+      localStorage.removeItem('debt_uploadNotificationSeen');
+    }
+  }
 }
 
 function loadFromLocalStorage() {
@@ -1802,25 +1852,10 @@ function showToast(msg, type = 'success') {
   setTimeout(() => toast.remove(), 3000);
 }
 
-// Update CSV upload timestamp when saving
-const originalSaveToLocalStorage = saveToLocalStorage;
-function saveToLocalStorage() {
-  originalSaveToLocalStorage();
-  
-  // If CSV data was just uploaded, save timestamp
-  if (csvData.length > 0) {
-    const lastUploadTime = localStorage.getItem('debt_lastUploadTime');
-    if (!lastUploadTime || new Date() - new Date(lastUploadTime) > 300000) { // If no upload in last 5 mins
-      localStorage.setItem('debt_lastUploadTime', new Date().toISOString());
-      localStorage.removeItem('debt_uploadNotificationSeen'); // Reset for new users to see
-    }
-  }
-}
-
 // Initialize
 // Start the app when page loads
 window.addEventListener('load', function() {
-  console.log('🚀 App initializing...');
+  console.log('🚀 App initializing... Build:', DEBT_BUILD);
   initializeAuth();
 });
 
