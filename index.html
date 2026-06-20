@@ -832,7 +832,11 @@ function initializeAuth() {
   authInitialized = true;
 
   let sess = null;
-  let receivedHandoff = false;
+
+  const fragment = new URLSearchParams(window.location.hash.slice(1));
+  const query = new URLSearchParams(window.location.search);
+  const handoffSession = fragment.get('sess') || query.get('sess');
+  const receivedHandoff = !!handoffSession;
 
   // Storage can be restricted in an embedded browser, so it must not be the only handoff.
   try { sess = sessionStorage.getItem('dqap_sess'); } catch (e) {
@@ -840,17 +844,7 @@ function initializeAuth() {
   }
 
   // Preferred handoff: URL fragment (not sent to the web server).
-  if (!sess) {
-    const fragment = new URLSearchParams(window.location.hash.slice(1));
-    sess = fragment.get('sess');
-    receivedHandoff = !!sess;
-  }
-
-  // Backward compatibility with older Wiki deployments that used ?sess=.
-  if (!sess) {
-    sess = new URLSearchParams(window.location.search).get('sess');
-    receivedHandoff = !!sess;
-  }
+  if (!sess) sess = handoffSession;
 
   if (sess) {
     try { sessionStorage.setItem('dqap_sess', sess); } catch (e) { /* handoff still works */ }
@@ -879,11 +873,20 @@ async function autoLoginFromWiki(session) {
     const username = session.username;
     const displayName = session.displayName || session.fullName || username;
     
-    // Get user data from dqap_users collection
-    const userDoc = await db.collection('dqap_users').doc(username).get();
-    
-    if (userDoc.exists) {
-      const userData = userDoc.data();
+    // Wiki users are stored with generated document IDs; locate the record by its username field.
+    const usersRef = db.collection('dqap_users');
+    const userQuery = await usersRef.where('username', '==', username).limit(1).get();
+    let userData = null;
+
+    if (!userQuery.empty) {
+      userData = userQuery.docs[0].data();
+    } else {
+      // Compatibility with any older records whose document ID was the username.
+      const legacyUserDoc = await usersRef.doc(username).get();
+      if (legacyUserDoc.exists) userData = legacyUserDoc.data();
+    }
+
+    if (userData) {
       currentUser = username;
       currentUserRole = userData.role || 'user';
       currentUserData = {
