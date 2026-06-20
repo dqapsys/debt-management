@@ -768,7 +768,7 @@
     <div style="padding: 20px;">
       <div style="background: #E8F5E9; border-left: 4px solid #4CAF50; padding: 12px; border-radius: 4px; margin-bottom: 16px;">
         <div style="font-weight: 600; color: #2E7D32;">✓ CSV Updated</div>
-        <div style="font-size: 12px; color: var(--t2); margin-top: 4px;">Dev has uploaded the latest customer data. Please review and enter your collection commitments.</div>
+        <div id="commitmentReminderMessage" style="font-size: 12px; color: var(--t2); margin-top: 4px;">The latest customer data has been uploaded. Please review and enter your collection commitments.</div>
       </div>
       
       <div style="background: #f5f5f5; padding: 12px; border-radius: 4px; margin-bottom: 16px;">
@@ -815,6 +815,8 @@ firebase.initializeApp({
 });
 
 const db = firebase.firestore();
+const DEBT_META_COLLECTION = 'dqap_debt_meta';
+const DEBT_LATEST_CSV_DOC = 'latest_csv';
 
 // Current User State
 let currentUser = null;
@@ -822,7 +824,11 @@ let currentUserRole = null;
 let currentUserData = null;
 let wikiSession = null;
 let authInitialized = false;
-const DEBT_BUILD = '20260620.5';
+let latestUploadInfo = null;
+let activeNotificationType = null;
+let notificationTimer = null;
+let autoShownNotificationId = null;
+const DEBT_BUILD = '20260620.6';
 
 // ══ WIKI-INTEGRATED AUTHENTICATION ══
 // Check for Wiki session or fallback to standalone mode
@@ -919,7 +925,7 @@ async function autoLoginFromWiki(session) {
       loadProjects();
       
       // Check notifications
-      setTimeout(checkNotifications, 500);
+      startNotificationMonitor();
       
       showToast(`👋 Welcome, ${displayName}!`, 'success');
       
@@ -973,7 +979,7 @@ function parseCSV() {
   }
   
   const reader = new FileReader();
-  reader.onload = (e) => {
+  reader.onload = async (e) => {
     const lines = e.target.result.split('\n');
     csvData = [];
     
@@ -1004,9 +1010,37 @@ function parseCSV() {
     csvData.sort((a, b) => b.outstanding - a.outstanding);
     updateAllTabs();
     saveToLocalStorage();
+    const notificationPublished = await publishCsvUploadNotification();
+    if (!notificationPublished) {
+      showToast('CSV loaded, but team notification could not be published', 'error');
+    }
     showToast(`✅ Loaded ${csvData.length} customers`, 'success');
   };
   reader.readAsText(csvFile);
+}
+
+async function publishCsvUploadNotification() {
+  const uploadedAtIso = new Date().toISOString();
+  const uploadId = `${Date.now()}-${currentUser || 'unknown'}`;
+
+  latestUploadInfo = {
+    uploadId,
+    uploadedAtIso,
+    uploadedBy: currentUser || 'unknown',
+    uploadedByName: currentUserData?.fullName || currentUserData?.displayName || currentUser || 'Unknown user',
+    customerCount: csvData.length
+  };
+
+  try {
+    await db.collection(DEBT_META_COLLECTION).doc(DEBT_LATEST_CSV_DOC).set({
+      ...latestUploadInfo,
+      uploadedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+    return true;
+  } catch (error) {
+    console.error('Could not publish CSV upload notification:', error);
+    return false;
+  }
 }
 
 function parseCSVLine(line) {
@@ -1768,61 +1802,99 @@ function checkAdminNotifications() {
   }
 }
 
-function checkNotifications() {
+function getThisWeeksMondayAtTen(now = new Date()) {
+  const monday = new Date(now);
+  const daysSinceMonday = (now.getDay() + 6) % 7;
+  monday.setDate(now.getDate() - daysSinceMonday);
+  monday.setHours(10, 0, 0, 0);
+  return monday;
+}
+
+function getLatestUploadDate() {
+  if (!latestUploadInfo) return null;
+  if (latestUploadInfo.uploadedAt?.toDate) return latestUploadInfo.uploadedAt.toDate();
+  if (latestUploadInfo.uploadedAtIso) return new Date(latestUploadInfo.uploadedAtIso);
+  return null;
+}
+
+function uploadNoticeSeenKey() {
+  return `debt_upload_notice_seen_${String(currentUser || 'unknown').toLowerCase()}`;
+}
+
+function markCurrentUploadNoticeSeen() {
+  if (!latestUploadInfo) return;
+  const uploadId = latestUploadInfo.uploadId || latestUploadInfo.uploadedAtIso;
+  if (uploadId) localStorage.setItem(uploadNoticeSeenKey(), uploadId);
+}
+
+function startNotificationMonitor() {
+  checkNotifications();
+  if (notificationTimer) clearInterval(notificationTimer);
+  notificationTimer = setInterval(checkNotifications, 60000);
+}
+
+async function checkNotifications() {
   if (!currentUser) return;
-  
-  // Admin-specific checks
-  if (isAdmin()) {
-    checkAdminNotifications();
+
+  try {
+    const statusDoc = await db.collection(DEBT_META_COLLECTION).doc(DEBT_LATEST_CSV_DOC).get();
+    latestUploadInfo = statusDoc.exists ? statusDoc.data() : null;
+  } catch (error) {
+    console.warn('Could not check shared debt notifications:', error);
+  }
+
+  const now = new Date();
+  const mondayAtTen = getThisWeeksMondayAtTen(now);
+  const latestUploadDate = getLatestUploadDate();
+  const isDev = String(currentUser).toLowerCase() === 'dev';
+
+  if (isDev && now >= mondayAtTen && (!latestUploadDate || latestUploadDate < mondayAtTen)) {
+    activeNotificationType = 'upload';
+    showNotificationBadge('Upload Tally CSV Now');
+    const reminderId = `upload:${mondayAtTen.toISOString()}`;
+    if (autoShownNotificationId !== reminderId) {
+      autoShownNotificationId = reminderId;
+      showCSVUploadReminder();
+    }
     return;
   }
-  
-  const now = new Date();
-  const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday
-  const hours = now.getHours();
-  const csvUploadTime = localStorage.getItem('debt_lastUploadTime');
-  const uploadNotificationSeen = localStorage.getItem('debt_uploadNotificationSeen');
-  
-  // Check for Monday 10 AM CSV upload reminder (CSV uploaders + Admins)
-  if (isCSVUploader() && dayOfWeek === 1 && hours >= 10 && hours < 11) {
-    const lastReminder = localStorage.getItem('debt_lastCsvReminder');
-    const today = new Date().toDateString();
-    
-    if (lastReminder !== today) {
-      showCSVUploadReminder();
-      localStorage.setItem('debt_lastCsvReminder', today);
-      showNotificationBadge('📤 Upload CSV Now');
+
+  if (latestUploadInfo && latestUploadDate) {
+    const uploadId = latestUploadInfo.uploadId || latestUploadInfo.uploadedAtIso;
+    const seenUploadId = localStorage.getItem(uploadNoticeSeenKey());
+    if (uploadId && seenUploadId !== uploadId) {
+      activeNotificationType = 'commitment';
+      showNotificationBadge('Enter Your Commitments');
+      const reminderId = `commitment:${uploadId}`;
+      if (autoShownNotificationId !== reminderId) {
+        autoShownNotificationId = reminderId;
+        showCommitmentReminder();
+      }
+      return;
     }
   }
-  
-  // Check for new CSV upload notification (all users except CSV uploaders and Admins)
-  if (!isCSVUploader() && csvUploadTime && !uploadNotificationSeen) {
-    const uploadTime = new Date(csvUploadTime);
-    const timeSinceUpload = (now - uploadTime) / 1000 / 60; // in minutes
-    
-    if (timeSinceUpload < 30) { // Show notification if uploaded in last 30 minutes
-      showCommitmentReminder();
-      localStorage.setItem('debt_uploadNotificationSeen', 'true');
-      showNotificationBadge('📋 Enter Your Commitments');
-    }
-  }
+
+  activeNotificationType = null;
+  hideNotificationBadge();
+  if (isAdmin()) checkAdminNotifications();
 }
 
 function showCSVUploadReminder() {
-  const lastUploadTime = localStorage.getItem('debt_lastUploadTime');
-  if (lastUploadTime) {
-    const date = new Date(lastUploadTime);
-    document.getElementById('lastUploadTime').textContent = date.toLocaleString('en-IN');
-  }
+  const lastUploadDate = getLatestUploadDate();
+  document.getElementById('lastUploadTime').textContent = lastUploadDate
+    ? lastUploadDate.toLocaleString('en-IN')
+    : 'Never';
   document.getElementById('csvUploadModal').classList.add('active');
 }
 
 function showCommitmentReminder() {
-  const uploadTime = localStorage.getItem('debt_lastUploadTime');
-  if (uploadTime) {
-    const date = new Date(uploadTime);
-    document.getElementById('uploadNotifyTime').textContent = date.toLocaleString('en-IN');
-  }
+  const uploadDate = getLatestUploadDate();
+  document.getElementById('uploadNotifyTime').textContent = uploadDate
+    ? uploadDate.toLocaleString('en-IN')
+    : 'Unknown';
+  const uploader = latestUploadInfo?.uploadedByName || latestUploadInfo?.uploadedBy || 'A team member';
+  document.getElementById('commitmentReminderMessage').textContent =
+    `${uploader} uploaded the latest customer data. Please review and enter your collection commitments.`;
   document.getElementById('commitmentReminderModal').classList.add('active');
 }
 
@@ -1838,10 +1910,9 @@ function hideNotificationBadge() {
 }
 
 function openNotificationModal() {
-  const currentUser = localStorage.getItem('debt_currentUser');
-  if (currentUser === 'Dev') {
+  if (activeNotificationType === 'upload') {
     showCSVUploadReminder();
-  } else {
+  } else if (activeNotificationType === 'commitment') {
     showCommitmentReminder();
   }
 }
@@ -1853,6 +1924,7 @@ function goToUploadTab() {
 }
 
 function goToSummaryTab() {
+  markCurrentUploadNoticeSeen();
   closeModal('commitmentReminderModal');
   hideNotificationBadge();
   switchTab('summary');
