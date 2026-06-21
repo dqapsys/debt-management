@@ -495,14 +495,16 @@
         <thead>
           <tr>
             <th>Customer</th>
+            <th>Linked Project</th>
             <th style="text-align: right;">Outstanding</th>
             <th style="text-align: right;">Allocated</th>
             <th style="text-align: right;">Committed</th>
+            <th style="text-align: right;">Collected</th>
             <th>Status</th>
           </tr>
         </thead>
         <tbody id="summaryTable">
-          <tr><td colspan="5" style="text-align: center; color: var(--t2);">No data yet</td></tr>
+          <tr><td colspan="7" style="text-align: center; color: var(--t2);">No data yet</td></tr>
         </tbody>
       </table>
     </div>
@@ -834,7 +836,7 @@ let latestUploadInfo = null;
 let activeNotificationType = null;
 let notificationTimer = null;
 let autoShownNotificationId = null;
-const DEBT_BUILD = '20260620.7';
+const DEBT_BUILD = '20260620.8';
 
 // ══ WIKI-INTEGRATED AUTHENTICATION ══
 // Check for Wiki session or fallback to standalone mode
@@ -1113,7 +1115,10 @@ function updateSummary() {
   
   const tbody = document.getElementById('summaryTable');
   tbody.innerHTML = csvData.map(customer => {
-    const allocated = allocationsData.filter(a => a.customer === customer.customerName).reduce((s, a) => s + a.amount, 0);
+    const customerAllocations = allocationsData.filter(a => a.customer === customer.customerName);
+    const allocated = customerAllocations.reduce((s, a) => s + a.amount, 0);
+    const linkedProjects = [...new Set(customerAllocations.map(a => a.project).filter(Boolean))];
+    const linkedProjectText = linkedProjects.length ? linkedProjects.join(', ') : '-';
     const commitments = commitmentsData.filter(c => c.customer === customer.customerName);
     const committed = commitments.reduce((s, c) => s + c.amount, 0);
     const collected = commitments.reduce((s, c) => s + (c.collected || 0), 0);
@@ -1151,9 +1156,11 @@ function updateSummary() {
     return `
       <tr>
         <td><strong>${customer.customerName}</strong></td>
+        <td>${linkedProjectText}</td>
         <td style="text-align: right;">₹${customer.outstanding.toLocaleString('en-IN')}</td>
         <td style="text-align: right;">₹${allocated.toLocaleString('en-IN')}</td>
         <td style="text-align: right;">₹${committed.toLocaleString('en-IN')}</td>
+        <td style="text-align: right;">₹${collected.toLocaleString('en-IN')}</td>
         <td><span class="badge ${status}">${statusText}</span></td>
       </tr>
     `;
