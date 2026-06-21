@@ -593,6 +593,12 @@
         <option value="">-- Select Project --</option>
       </select>
     </div>
+
+    <div class="form-group" id="otherProjectGroup" style="display: none;">
+      <label>Non-project Customer / Reference *</label>
+      <input type="text" id="otherProjectName" placeholder="Enter customer or reference name" maxlength="120">
+      <div style="font-size: 10.5px; color: var(--t2); margin-top: 4px;">This will be displayed as Other-[entered text].</div>
+    </div>
     
     <div class="form-group">
       <label>PO Number *</label>
@@ -828,7 +834,7 @@ let latestUploadInfo = null;
 let activeNotificationType = null;
 let notificationTimer = null;
 let autoShownNotificationId = null;
-const DEBT_BUILD = '20260620.6';
+const DEBT_BUILD = '20260620.7';
 
 // ══ WIKI-INTEGRATED AUTHENTICATION ══
 // Check for Wiki session or fallback to standalone mode
@@ -1331,6 +1337,9 @@ async function openLinkModal(customerName) {
   document.getElementById('projectSelect').innerHTML = '<option value="">-- Select Project --</option>';
   document.getElementById('poSelect').innerHTML = '<option value="">-- Select PO --</option>';
   document.getElementById('allocationAmount').value = '';
+  document.getElementById('otherProjectName').value = '';
+  document.getElementById('otherProjectGroup').style.display = 'none';
+  document.getElementById('poSelect').disabled = false;
   
   await loadProjects();
   updateAllocationsList();
@@ -1372,18 +1381,44 @@ async function loadProjects() {
       opt.textContent = `${p.name} (${p.number})`;
       sel.appendChild(opt);
     });
+
+    const otherOpt = document.createElement('option');
+    otherOpt.value = '__other__';
+    otherOpt.textContent = 'Other (Non-project outstanding)';
+    sel.appendChild(otherOpt);
     
     console.log('✓ Loaded projects:', projectsData);
   } catch (err) {
     console.warn('Could not load projects:', err.message);
+    const sel = document.getElementById('projectSelect');
+    if (sel && !Array.from(sel.options).some(option => option.value === '__other__')) {
+      const otherOpt = document.createElement('option');
+      otherOpt.value = '__other__';
+      otherOpt.textContent = 'Other (Non-project outstanding)';
+      sel.appendChild(otherOpt);
+    }
   }
 }
 
 function loadPOs() {
   const projId = document.getElementById('projectSelect').value;
   const poSel = document.getElementById('poSelect');
+  const otherGroup = document.getElementById('otherProjectGroup');
+  const otherInput = document.getElementById('otherProjectName');
   poSel.innerHTML = '<option value="">-- Select PO --</option>';
-  
+
+  poSel.disabled = false;
+  otherGroup.style.display = 'none';
+
+  if (projId === '__other__') {
+    otherGroup.style.display = 'block';
+    poSel.innerHTML = '<option value="N/A">N/A — Non-project outstanding</option>';
+    poSel.disabled = true;
+    setTimeout(() => otherInput.focus(), 0);
+    return;
+  }
+
+  otherInput.value = '';
   if (!projId) return;
   
   const proj = projectsData.find(p => p.id === projId);
@@ -1411,26 +1446,44 @@ function loadPOs() {
 
 function addAllocation() {
   const projId = document.getElementById('projectSelect').value;
-  const poNum = document.getElementById('poSelect').value;
+  const isOther = projId === '__other__';
+  const otherInput = document.getElementById('otherProjectName');
+  const otherName = otherInput.value.trim().replace(/^other\s*[-:]\s*/i, '').replace(/[<>]/g, '');
+  const poNum = isOther ? 'N/A' : document.getElementById('poSelect').value;
   const amount = parseFloat(document.getElementById('allocationAmount').value) || 0;
-  
+
   if (!projId || !poNum || amount <= 0) {
     showToast('Please fill all fields', 'error');
     return;
   }
-  
+
+  if (isOther && !otherName) {
+    showToast('Please enter the non-project customer or reference name', 'error');
+    otherInput.focus();
+    return;
+  }
+
   const proj = projectsData.find(p => p.id === projId);
+  if (!isOther && !proj) {
+    showToast('Please select a valid project', 'error');
+    return;
+  }
+
+  const projectLabel = isOther ? `Other-${otherName}` : proj.name;
   
   tempAllocations.push({
     id: Date.now().toString(),
     customer: currentCustomer.customerName,
-    project: proj.name,
+    project: projectLabel,
     po: poNum,
     amount: amount
   });
   
   document.getElementById('projectSelect').value = '';
-  document.getElementById('poSelect').value = '';
+  document.getElementById('poSelect').disabled = false;
+  document.getElementById('poSelect').innerHTML = '<option value="">-- Select PO --</option>';
+  document.getElementById('otherProjectName').value = '';
+  document.getElementById('otherProjectGroup').style.display = 'none';
   document.getElementById('allocationAmount').value = '';
   updateAllocationsList();
 }
