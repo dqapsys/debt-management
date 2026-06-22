@@ -1,4 +1,5 @@
 
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -438,6 +439,7 @@
         <button class="btn primary" onclick="parseCSV()" style="margin-left: 10px;">Upload & Parse</button>
       </div>
     </div>
+    <div id="debtCycleInfo" style="margin-bottom:14px;padding:10px 12px;background:#E4F1FA;border-left:4px solid var(--p);border-radius:6px;font-size:11px;color:var(--t2)"></div>
     
     <div class="card">
       <table>
@@ -446,7 +448,7 @@
             <th>Customer Name</th>
             <th style="text-align: right;">Opening</th>
             <th style="text-align: right;">Billed</th>
-            <th style="text-align: right;">Collected</th>
+            <th style="text-align: right;">Tally Collected (Reference)</th>
             <th style="text-align: right;">Outstanding</th>
           </tr>
         </thead>
@@ -485,7 +487,7 @@
         <div class="stat-icon">✓</div>
         <div>
           <div class="stat-value" id="statCollected">₹0</div>
-          <div class="stat-label">Collected</div>
+          <div class="stat-label">Collected This Cycle</div>
         </div>
       </div>
     </div>
@@ -825,6 +827,10 @@ firebase.initializeApp({
 const db = firebase.firestore();
 const DEBT_META_COLLECTION = 'dqap_debt_meta';
 const DEBT_LATEST_CSV_DOC = 'latest_csv';
+const DEBT_CYCLES_COLLECTION = 'dqap_debt_cycles';
+const DEBT_ALLOCATIONS_COLLECTION = 'dqap_debt_allocations';
+const DEBT_COMMITMENTS_COLLECTION = 'dqap_debt_commitments';
+const DEBT_COLLECTIONS_COLLECTION = 'dqap_debt_collections';
 
 // Current User State
 let currentUser = null;
@@ -835,8 +841,10 @@ let authInitialized = false;
 let latestUploadInfo = null;
 let activeNotificationType = null;
 let notificationTimer = null;
+let debtMetaUnsub = null;
+let debtCycleUnsubs = [];
 let autoShownNotificationId = null;
-const DEBT_BUILD = '20260620.8';
+const DEBT_BUILD = '20260622.2';
 
 // ══ WIKI-INTEGRATED AUTHENTICATION ══
 // Check for Wiki session or fallback to standalone mode
@@ -927,8 +935,9 @@ async function autoLoginFromWiki(session) {
       // Update UI
       updateUserInfo();
       
-      // Load data
+      // Load local fallback first, then replace it with the shared Firestore cycle.
       loadFromLocalStorage();
+      await loadDebtStateFromFirestore();
       updateAllTabs();
       loadProjects();
       
@@ -956,6 +965,7 @@ async function autoLoginFromWiki(session) {
 let csvData = [];
 let allocationsData = [];
 let commitmentsData = [];
+let collectionsData = [];
 let projectsData = [];
 let wikiUsers = [];
 let currentCustomer = null;
@@ -963,6 +973,110 @@ let tempAllocations = [];
 let currentAllocationId = null;
 let currentCommitmentId = null;
 let csvFile = null;
+let currentCycleId = null;
+
+function debtCycleIdForDate(value = new Date()) {
+  const date = new Date(value);
+  const daysSinceMonday = (date.getDay() + 6) % 7;
+  date.setDate(date.getDate() - daysSinceMonday);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function applyCollectionLedgerTotals() {
+  commitmentsData.forEach(commitment => {
+    const records = collectionsData.filter(record => record.commitmentId === commitment.id);
+    commitment.collected = records.reduce((sum, record) => sum + Number(record.amount || 0), 0);
+    commitment.collectionDate = records.sort((a, b) => String(b.collectionDate || '').localeCompare(String(a.collectionDate || '')))[0]?.collectionDate || null;
+  });
+}
+
+async function loadDebtStateFromFirestore() {
+  try {
+    const metaDoc = await db.collection(DEBT_META_COLLECTION).doc(DEBT_LATEST_CSV_DOC).get();
+    latestUploadInfo = metaDoc.exists ? metaDoc.data() : null;
+    const cycleId = latestUploadInfo?.cycleId;
+    if (!cycleId) return false;
+
+    const [cycleDoc, allocationSnap, commitmentSnap, collectionSnap] = await Promise.all([
+      db.collection(DEBT_CYCLES_COLLECTION).doc(cycleId).get(),
+      db.collection(DEBT_ALLOCATIONS_COLLECTION).where('cycleId', '==', cycleId).get(),
+      db.collection(DEBT_COMMITMENTS_COLLECTION).where('cycleId', '==', cycleId).get(),
+      db.collection(DEBT_COLLECTIONS_COLLECTION).where('cycleId', '==', cycleId).get()
+    ]);
+    if (!cycleDoc.exists) return false;
+
+    currentCycleId = cycleId;
+    csvData = Array.isArray(cycleDoc.data().customers) ? cycleDoc.data().customers : [];
+    allocationsData = allocationSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    commitmentsData = commitmentSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    collectionsData = collectionSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    applyCollectionLedgerTotals();
+    saveToLocalStorage();
+    startDebtCycleListeners();
+    return true;
+  } catch (error) {
+    console.warn('Shared debt cycle could not be loaded; using the local fallback:', error);
+    return false;
+  }
+}
+
+function startDebtCycleListeners() {
+  debtCycleUnsubs.forEach(unsubscribe => unsubscribe());
+  debtCycleUnsubs = [];
+  if (!currentCycleId) return;
+
+  const onError = error => console.warn('Debt live update unavailable:', error);
+  debtCycleUnsubs.push(
+    db.collection(DEBT_ALLOCATIONS_COLLECTION).where('cycleId', '==', currentCycleId).onSnapshot(snapshot => {
+      allocationsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      updateAllTabs(); saveToLocalStorage();
+    }, onError),
+    db.collection(DEBT_COMMITMENTS_COLLECTION).where('cycleId', '==', currentCycleId).onSnapshot(snapshot => {
+      commitmentsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      applyCollectionLedgerTotals(); updateAllTabs(); saveToLocalStorage();
+    }, onError),
+    db.collection(DEBT_COLLECTIONS_COLLECTION).where('cycleId', '==', currentCycleId).onSnapshot(snapshot => {
+      collectionsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      applyCollectionLedgerTotals(); updateAllTabs(); saveToLocalStorage();
+    }, onError)
+  );
+}
+
+function buildCarriedAllocations(previousAllocations, customers, newCycleId) {
+  const outstandingByCustomer = new Map(customers.map(customer => [customer.customerName, Number(customer.outstanding || 0)]));
+  const usedByCustomer = new Map();
+  const carried = [];
+  previousAllocations.forEach(allocation => {
+    const outstanding = outstandingByCustomer.get(allocation.customer) || 0;
+    const used = usedByCustomer.get(allocation.customer) || 0;
+    const amount = Math.min(Number(allocation.amount || 0), Math.max(0, outstanding - used));
+    if (amount <= 0) return;
+    const ref = db.collection(DEBT_ALLOCATIONS_COLLECTION).doc();
+    carried.push({ id: ref.id, ref, data: { cycleId: newCycleId, customer: allocation.customer, project: allocation.project, po: allocation.po, amount, carriedFromCycleId: allocation.cycleId || null, createdAt: new Date(), createdBy: currentUser } });
+    usedByCustomer.set(allocation.customer, used + amount);
+  });
+  return carried;
+}
+
+async function archiveExistingCollectionLedger(records, previousCycleId, newCycleId) {
+  if (!records.length) return;
+  const archiveCycleId = previousCycleId || `legacy-before-${newCycleId}`;
+  for (let start = 0; start < records.length; start += 400) {
+    const batch = db.batch();
+    records.slice(start, start + 400).forEach((record, index) => {
+      const safeId = String(record.id || `legacy-${start + index}-${Date.now()}`).replace(/\//g, '_');
+      batch.set(db.collection(DEBT_COLLECTIONS_COLLECTION).doc(safeId), {
+        ...record,
+        id: safeId,
+        cycleId: record.cycleId || archiveCycleId,
+        source: record.source || 'legacy-local',
+        migratedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        migratedBy: currentUser
+      }, { merge: true });
+    });
+    await batch.commit();
+  }
+}
 
 // Tab Switching
 function switchTab(tabName) {
@@ -1016,15 +1130,68 @@ function parseCSV() {
     }
     
     csvData.sort((a, b) => b.outstanding - a.outstanding);
+    const notificationPublished = await persistUploadedWeeklyCycle();
     updateAllTabs();
     saveToLocalStorage();
-    const notificationPublished = await publishCsvUploadNotification();
     if (!notificationPublished) {
       showToast('CSV loaded, but team notification could not be published', 'error');
     }
     showToast(`✅ Loaded ${csvData.length} customers`, 'success');
   };
   reader.readAsText(csvFile);
+}
+
+async function persistUploadedWeeklyCycle() {
+  const uploadedAtIso = new Date().toISOString();
+  const newCycleId = debtCycleIdForDate(new Date());
+  const uploadId = `${Date.now()}-${currentUser || 'unknown'}`;
+  try {
+    const metaRef = db.collection(DEBT_META_COLLECTION).doc(DEBT_LATEST_CSV_DOC);
+    const previousMetaDoc = await metaRef.get();
+    const previousCycleId = previousMetaDoc.exists ? previousMetaDoc.data().cycleId : currentCycleId;
+    const isNewCycle = previousCycleId !== newCycleId;
+    const previousAllocations = [...allocationsData];
+
+    await db.collection(DEBT_CYCLES_COLLECTION).doc(newCycleId).set({
+      cycleId: newCycleId,
+      weekStart: newCycleId,
+      customers: csvData,
+      tallyCollectedSnapshotTotal: csvData.reduce((sum, row) => sum + Number(row.collected || 0), 0),
+      outstandingTotal: csvData.reduce((sum, row) => sum + Number(row.outstanding || 0), 0),
+      uploadedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      uploadedAtIso,
+      uploadedBy: currentUser,
+      customerCount: csvData.length
+    }, { merge: true });
+
+    if (isNewCycle) {
+      // Preserve older browser-only payment history before resetting the live week.
+      await archiveExistingCollectionLedger(collectionsData, previousCycleId, newCycleId);
+      const carried = buildCarriedAllocations(previousAllocations, csvData, newCycleId);
+      for (let start = 0; start < carried.length; start += 400) {
+        const batch = db.batch();
+        carried.slice(start, start + 400).forEach(item => batch.set(item.ref, item.data));
+        await batch.commit();
+      }
+      allocationsData = carried.map(item => ({ id: item.id, ...item.data }));
+      commitmentsData = [];
+      collectionsData = [];
+    }
+
+    currentCycleId = newCycleId;
+    latestUploadInfo = {
+      uploadId, cycleId: newCycleId, uploadedAtIso,
+      uploadedBy: currentUser || 'unknown',
+      uploadedByName: currentUserData?.fullName || currentUserData?.displayName || currentUser || 'Unknown user',
+      customerCount: csvData.length
+    };
+    await metaRef.set({ ...latestUploadInfo, uploadedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    startDebtCycleListeners();
+    return true;
+  } catch (error) {
+    console.error('Could not save the shared weekly debt cycle:', error);
+    return false;
+  }
 }
 
 async function publishCsvUploadNotification() {
@@ -1036,7 +1203,8 @@ async function publishCsvUploadNotification() {
     uploadedAtIso,
     uploadedBy: currentUser || 'unknown',
     uploadedByName: currentUserData?.fullName || currentUserData?.displayName || currentUser || 'Unknown user',
-    customerCount: csvData.length
+    customerCount: csvData.length,
+    cycleId: currentCycleId || debtCycleIdForDate(new Date())
   };
 
   try {
@@ -1106,12 +1274,13 @@ function updateSummary() {
   const totalOut = csvData.reduce((s, r) => s + r.outstanding, 0);
   const totalAlloc = allocationsData.reduce((s, a) => s + (a.amount || 0), 0);
   const totalCommit = commitmentsData.reduce((s, c) => s + (c.amount || 0), 0);
-  const totalCollect = commitmentsData.reduce((s, c) => s + (c.collected || 0), 0);
+  const totalCollect = collectionsData.filter(record => record.cycleId === currentCycleId).reduce((s, record) => s + Number(record.amount || 0), 0);
   
   document.getElementById('statOutstanding').textContent = `₹${totalOut.toLocaleString('en-IN')}`;
   document.getElementById('statAllocated').textContent = `₹${totalAlloc.toLocaleString('en-IN')}`;
   document.getElementById('statCommitted').textContent = `₹${totalCommit.toLocaleString('en-IN')}`;
   document.getElementById('statCollected').textContent = `₹${totalCollect.toLocaleString('en-IN')}`;
+  document.getElementById('debtCycleInfo').innerHTML = `<b style="color:var(--p)">Current weekly cycle: ${currentCycleId || 'Local fallback'}</b> · Uploaded Outstanding is treated as the Tally-adjusted source of truth. The CSV Collected column is retained only for reconciliation and is never subtracted again. This cycle’s manual collections start at zero and remain archived in the permanent ledger.`;
   
   const tbody = document.getElementById('summaryTable');
   tbody.innerHTML = csvData.map(customer => {
@@ -1121,7 +1290,8 @@ function updateSummary() {
     const linkedProjectText = linkedProjects.length ? linkedProjects.join(', ') : '-';
     const commitments = commitmentsData.filter(c => c.customer === customer.customerName);
     const committed = commitments.reduce((s, c) => s + c.amount, 0);
-    const collected = commitments.reduce((s, c) => s + (c.collected || 0), 0);
+    const commitmentIds = new Set(commitments.map(commitment => commitment.id));
+    const collected = collectionsData.filter(record => record.cycleId === currentCycleId && commitmentIds.has(record.commitmentId)).reduce((sum, record) => sum + Number(record.amount || 0), 0);
     
     // Status based on actual collection progress and dates
     let status = 'pending';
@@ -1479,7 +1649,7 @@ function addAllocation() {
   const projectLabel = isOther ? `Other-${otherName}` : proj.name;
   
   tempAllocations.push({
-    id: Date.now().toString(),
+    id: db.collection(DEBT_ALLOCATIONS_COLLECTION).doc().id,
     customer: currentCustomer.customerName,
     project: projectLabel,
     po: poNum,
@@ -1520,16 +1690,26 @@ function deleteAllocation(idx) {
   showToast('Allocation deleted', 'success');
 }
 
-function saveAllocations() {
+async function saveAllocations() {
   if (!currentCustomer) {
     showToast('No customer selected', 'error');
     return;
   }
 
-  allocationsData = allocationsData.filter(a => a.customer !== currentCustomer.customerName);
-  allocationsData.push(...tempAllocations);
-
   try {
+    const removed = allocationsData.filter(a => a.customer === currentCustomer.customerName);
+    const retained = allocationsData.filter(a => a.customer !== currentCustomer.customerName);
+    const saved = tempAllocations.map(allocation => ({ ...allocation, cycleId: currentCycleId, updatedAt: new Date(), updatedBy: currentUser }));
+    const savedIds = new Set(saved.map(allocation => allocation.id));
+    const deletedAllocationIds = new Set(removed.filter(allocation => !savedIds.has(allocation.id)).map(allocation => allocation.id));
+    const batch = db.batch();
+    removed.forEach(allocation => batch.delete(db.collection(DEBT_ALLOCATIONS_COLLECTION).doc(allocation.id)));
+    commitmentsData.filter(commitment => deletedAllocationIds.has(commitment.allocationId))
+      .forEach(commitment => batch.delete(db.collection(DEBT_COMMITMENTS_COLLECTION).doc(commitment.id)));
+    saved.forEach(allocation => batch.set(db.collection(DEBT_ALLOCATIONS_COLLECTION).doc(allocation.id), allocation));
+    await batch.commit();
+    allocationsData = [...retained, ...saved];
+    commitmentsData = commitmentsData.filter(commitment => !deletedAllocationIds.has(commitment.allocationId));
     saveToLocalStorage();
   } catch (error) {
     console.error('Could not save allocations:', error);
@@ -1621,7 +1801,7 @@ async function openCommitmentModal(allocId) {
   document.getElementById('commitmentModal').classList.add('active');
 }
 
-function saveCommitment() {
+async function saveCommitment() {
   const assignedSelect = document.getElementById('assignedTo');
   const selectedOption = assignedSelect.options[assignedSelect.selectedIndex];
   const assignedUsername = assignedSelect.value.startsWith('legacy:') ? '' : assignedSelect.value;
@@ -1635,21 +1815,31 @@ function saveCommitment() {
   
   const alloc = allocationsData.find(a => a.id === currentAllocationId);
   
-  commitmentsData = commitmentsData.filter(c => c.allocationId !== currentAllocationId);
-  
+  const existingCommitment = commitmentsData.find(c => c.allocationId === currentAllocationId);
+  const commitmentId = existingCommitment?.id || db.collection(DEBT_COMMITMENTS_COLLECTION).doc().id;
   const newCommit = {
-    id: Date.now().toString(),
+    id: commitmentId,
+    cycleId: currentCycleId,
     allocationId: currentAllocationId,
     customer: alloc.customer,
     amount: alloc.amount,
     assignedTo: assigned,
     assignedUsername: assignedUsername,
     commitDate: date,
-    collected: 0,  // Always 0 initially
-    collectionDate: null  // To be filled when payment received
+    createdAt: existingCommitment?.createdAt || new Date(),
+    updatedAt: new Date(),
+    updatedBy: currentUser
   };
-  
-  commitmentsData.push(newCommit);
+
+  try {
+    await db.collection(DEBT_COMMITMENTS_COLLECTION).doc(commitmentId).set(newCommit, { merge: true });
+    commitmentsData = commitmentsData.filter(c => c.allocationId !== currentAllocationId);
+    commitmentsData.push({ ...existingCommitment, ...newCommit });
+    applyCollectionLedgerTotals();
+  } catch (error) {
+    showToast('Could not save commitment: ' + error.message, 'error');
+    return;
+  }
   
   console.log('✅ Commitment saved:', {
     customer: newCommit.customer,
@@ -1671,12 +1861,12 @@ function openCollectionModal(commitmentId) {
   currentCommitmentId = commitmentId;
   document.getElementById('colCustomer').textContent = commit.customer;
   document.getElementById('colAmount').textContent = commit.amount.toLocaleString('en-IN');
-  document.getElementById('collectedAmountInput').value = commit.collected || 0;
-  document.getElementById('collectionDateInput').value = commit.collectionDate || '';
+  document.getElementById('collectedAmountInput').value = '';
+  document.getElementById('collectionDateInput').value = new Date().toISOString().split('T')[0];
   document.getElementById('collectionModal').classList.add('active');
 }
 
-function saveCollection() {
+async function saveCollection() {
   const collectedAmt = parseFloat(document.getElementById('collectedAmountInput').value) || 0;
   const collectionDate = document.getElementById('collectionDateInput').value;
   
@@ -1688,13 +1878,36 @@ function saveCollection() {
   const commit = commitmentsData.find(c => c.id === currentCommitmentId);
   if (!commit) return;
   
-  if (collectedAmt > commit.amount) {
-    showToast('Collected amount cannot exceed committed amount', 'error');
+  if (collectedAmt <= 0) {
+    showToast('Please enter a collection amount greater than zero', 'error');
     return;
   }
-  
-  commit.collected = collectedAmt;
-  commit.collectionDate = collectionDate;
+  const remaining = Math.max(0, Number(commit.amount || 0) - Number(commit.collected || 0));
+  if (collectedAmt > remaining) {
+    showToast(`Collection cannot exceed the remaining committed amount of ₹${remaining.toLocaleString('en-IN')}`, 'error');
+    return;
+  }
+
+  const duplicate = collectionsData.some(record => record.commitmentId === commit.id && record.collectionDate === collectionDate && Number(record.amount) === collectedAmt);
+  if (duplicate) {
+    showToast('This payment appears to have already been recorded', 'error');
+    return;
+  }
+
+  const ref = db.collection(DEBT_COLLECTIONS_COLLECTION).doc();
+  const collectionRecord = {
+    id: ref.id, cycleId: currentCycleId, commitmentId: commit.id, allocationId: commit.allocationId,
+    customer: commit.customer, amount: collectedAmt, collectionDate, source: 'manual',
+    recordedBy: currentUser, recordedAt: new Date()
+  };
+  try {
+    await ref.set(collectionRecord);
+    collectionsData.push(collectionRecord);
+    applyCollectionLedgerTotals();
+  } catch (error) {
+    showToast('Could not record collection: ' + error.message, 'error');
+    return;
+  }
   
   console.log('✅ Collection recorded:', {
     customer: commit.customer,
@@ -1709,10 +1922,19 @@ function saveCollection() {
   showToast('✅ Collection recorded', 'success');
 }
 
-function deleteCommitment(commitmentId) {
+async function deleteCommitment(commitmentId) {
   if (!confirm('Delete this commitment?')) return;
-  
-  commitmentsData = commitmentsData.filter(c => c.id !== commitmentId);
+  if (collectionsData.some(record => record.commitmentId === commitmentId)) {
+    showToast('A commitment with recorded payments cannot be deleted', 'error');
+    return;
+  }
+  try {
+    await db.collection(DEBT_COMMITMENTS_COLLECTION).doc(commitmentId).delete();
+    commitmentsData = commitmentsData.filter(c => c.id !== commitmentId);
+  } catch (error) {
+    showToast('Could not delete commitment: ' + error.message, 'error');
+    return;
+  }
   
   console.log('🗑️ Commitment deleted');
   
@@ -1741,6 +1963,8 @@ function saveToLocalStorage() {
   localStorage.setItem('debt_csv', JSON.stringify(csvData));
   localStorage.setItem('debt_allocations', JSON.stringify(allocationsData));
   localStorage.setItem('debt_commitments', JSON.stringify(commitmentsData));
+  localStorage.setItem('debt_collections', JSON.stringify(collectionsData));
+  if (currentCycleId) localStorage.setItem('debt_cycle_id', currentCycleId);
 
   if (csvData.length > 0) {
     const lastUploadTime = localStorage.getItem('debt_lastUploadTime');
@@ -1755,6 +1979,14 @@ function loadFromLocalStorage() {
   csvData = JSON.parse(localStorage.getItem('debt_csv') || '[]');
   allocationsData = JSON.parse(localStorage.getItem('debt_allocations') || '[]');
   commitmentsData = JSON.parse(localStorage.getItem('debt_commitments') || '[]');
+  collectionsData = JSON.parse(localStorage.getItem('debt_collections') || '[]');
+  currentCycleId = localStorage.getItem('debt_cycle_id') || null;
+  if (!collectionsData.length) {
+    commitmentsData.filter(commitment => Number(commitment.collected || 0) > 0).forEach(commitment => {
+      collectionsData.push({ id: `legacy-${commitment.id}`, cycleId: 'legacy', commitmentId: commitment.id, allocationId: commitment.allocationId, customer: commitment.customer, amount: Number(commitment.collected || 0), collectionDate: commitment.collectionDate || '', source: 'legacy-local' });
+    });
+  }
+  applyCollectionLedgerTotals();
 }
 
 // User Management
@@ -1888,19 +2120,32 @@ function markCurrentUploadNoticeSeen() {
 }
 
 function startNotificationMonitor() {
-  checkNotifications();
   if (notificationTimer) clearInterval(notificationTimer);
-  notificationTimer = setInterval(checkNotifications, 60000);
+  if (debtMetaUnsub) debtMetaUnsub();
+  debtMetaUnsub = db.collection(DEBT_META_COLLECTION).doc(DEBT_LATEST_CSV_DOC).onSnapshot(async doc => {
+    const previousCycleId = currentCycleId;
+    latestUploadInfo = doc.exists ? doc.data() : null;
+    if (latestUploadInfo?.cycleId && latestUploadInfo.cycleId !== previousCycleId) {
+      await loadDebtStateFromFirestore();
+      updateAllTabs();
+    }
+    checkNotifications(true);
+  }, error => {
+    console.warn('Could not watch shared debt notifications:', error);
+    checkNotifications(false);
+  });
 }
 
-async function checkNotifications() {
+async function checkNotifications(useCachedInfo = false) {
   if (!currentUser) return;
 
-  try {
-    const statusDoc = await db.collection(DEBT_META_COLLECTION).doc(DEBT_LATEST_CSV_DOC).get();
-    latestUploadInfo = statusDoc.exists ? statusDoc.data() : null;
-  } catch (error) {
-    console.warn('Could not check shared debt notifications:', error);
+  if (!useCachedInfo) {
+    try {
+      const statusDoc = await db.collection(DEBT_META_COLLECTION).doc(DEBT_LATEST_CSV_DOC).get();
+      latestUploadInfo = statusDoc.exists ? statusDoc.data() : null;
+    } catch (error) {
+      console.warn('Could not check shared debt notifications:', error);
+    }
   }
 
   const now = new Date();
