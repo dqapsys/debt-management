@@ -423,11 +423,11 @@
   </div>
   
   <div class="tabs">
-    <button class="tab-btn active" onclick="switchTab('upload')">📤 Upload CSV</button>
-    <button class="tab-btn" onclick="switchTab('summary')">📊 Summary</button>
-    <button class="tab-btn" onclick="switchTab('linking')">🔗 Link Projects</button>
-    <button class="tab-btn" onclick="switchTab('commitments')">📅 Commitments</button>
-    <button class="tab-btn" onclick="switchTab('leaderboard')">🏆 Leaderboard</button>
+    <button class="tab-btn active" data-tab="upload" data-debt-operator onclick="switchTab('upload', this)">📤 Upload CSV</button>
+    <button class="tab-btn" data-tab="summary" onclick="switchTab('summary', this)">📊 Summary</button>
+    <button class="tab-btn" data-tab="linking" data-debt-operator onclick="switchTab('linking', this)">🔗 Link Projects</button>
+    <button class="tab-btn" data-tab="commitments" data-debt-operator onclick="switchTab('commitments', this)">📅 Commitments</button>
+    <button class="tab-btn" data-tab="leaderboard" data-debt-operator onclick="switchTab('leaderboard', this)">🏆 Leaderboard</button>
   </div>
   
   <!-- Upload Tab -->
@@ -844,7 +844,7 @@ let notificationTimer = null;
 let debtMetaUnsub = null;
 let debtCycleUnsubs = [];
 let autoShownNotificationId = null;
-const DEBT_BUILD = '20260622.2';
+const DEBT_BUILD = '20260622.3';
 
 // ══ WIKI-INTEGRATED AUTHENTICATION ══
 // Check for Wiki session or fallback to standalone mode
@@ -934,6 +934,7 @@ async function autoLoginFromWiki(session) {
       
       // Update UI
       updateUserInfo();
+      applyDebtPermissions();
       
       // Load local fallback first, then replace it with the shared Firestore cycle.
       loadFromLocalStorage();
@@ -1079,22 +1080,38 @@ async function archiveExistingCollectionLedger(records, previousCycleId, newCycl
 }
 
 // Tab Switching
-function switchTab(tabName) {
+function switchTab(tabName, triggerButton = null) {
+  const allowedTabs = getAllowedDebtTabs();
+  if (!allowedTabs.has(tabName)) {
+    showToast('You do not have permission to open this page', 'error');
+    tabName = 'summary';
+  }
   document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-  
-  document.getElementById(tabName).classList.add('active');
-  event.target.classList.add('active');
+
+  const tab = document.getElementById(tabName);
+  const button = triggerButton || document.querySelector(`.tab-btn[data-tab="${tabName}"]`);
+  if (tab) tab.classList.add('active');
+  if (button) button.classList.add('active');
   
   updateAllTabs();
 }
 
 // CSV Handling
 function handleFileSelect(e) {
+  if (!canUploadCSV()) {
+    e.target.value = '';
+    showToast('Only dev and updesh can upload the Tally CSV', 'error');
+    return;
+  }
   csvFile = e.target.files[0];
 }
 
 function parseCSV() {
+  if (!canUploadCSV()) {
+    showToast('Only dev and updesh can upload the Tally CSV', 'error');
+    return;
+  }
   if (!csvFile) {
     showToast('Please select a CSV file', 'error');
     return;
@@ -1142,6 +1159,10 @@ function parseCSV() {
 }
 
 async function persistUploadedWeeklyCycle() {
+  if (!canUploadCSV()) {
+    showToast('Only dev and updesh can upload the Tally CSV', 'error');
+    return false;
+  }
   const uploadedAtIso = new Date().toISOString();
   const newCycleId = debtCycleIdForDate(new Date());
   const uploadId = `${Date.now()}-${currentUser || 'unknown'}`;
@@ -1501,6 +1522,10 @@ function updateLeaderboard() {
 
 // Modal Functions
 async function openLinkModal(customerName) {
+  if (!canAccessDebtOperations()) {
+    showToast('Only updesh and pratim can manage project links', 'error');
+    return;
+  }
   currentCustomer = csvData.find(c => c.customerName === customerName);
   if (!currentCustomer) return;
   
@@ -1622,6 +1647,10 @@ function loadPOs() {
 }
 
 function addAllocation() {
+  if (!canAccessDebtOperations()) {
+    showToast('Only updesh and pratim can manage project links', 'error');
+    return;
+  }
   const projId = document.getElementById('projectSelect').value;
   const isOther = projId === '__other__';
   const otherInput = document.getElementById('otherProjectName');
@@ -1691,6 +1720,10 @@ function deleteAllocation(idx) {
 }
 
 async function saveAllocations() {
+  if (!canAccessDebtOperations()) {
+    showToast('Only updesh and pratim can manage project links', 'error');
+    return;
+  }
   if (!currentCustomer) {
     showToast('No customer selected', 'error');
     return;
@@ -1779,6 +1812,10 @@ async function loadWikiUsers(selectedCommitment = null) {
 }
 
 async function openCommitmentModal(allocId) {
+  if (!canManageCommitments()) {
+    showToast('Only updesh and pratim can set or edit commitments', 'error');
+    return;
+  }
   currentAllocationId = allocId;
   const alloc = allocationsData.find(a => a.id === allocId);
   const commit = commitmentsData.find(c => c.allocationId === allocId);
@@ -1802,6 +1839,10 @@ async function openCommitmentModal(allocId) {
 }
 
 async function saveCommitment() {
+  if (!canManageCommitments()) {
+    showToast('Only updesh and pratim can set or edit commitments', 'error');
+    return;
+  }
   const assignedSelect = document.getElementById('assignedTo');
   const selectedOption = assignedSelect.options[assignedSelect.selectedIndex];
   const assignedUsername = assignedSelect.value.startsWith('legacy:') ? '' : assignedSelect.value;
@@ -1855,6 +1896,10 @@ async function saveCommitment() {
 }
 
 function openCollectionModal(commitmentId) {
+  if (!canManageCommitments()) {
+    showToast('Only updesh and pratim can record collections', 'error');
+    return;
+  }
   const commit = commitmentsData.find(c => c.id === commitmentId);
   if (!commit) return;
   
@@ -1867,6 +1912,10 @@ function openCollectionModal(commitmentId) {
 }
 
 async function saveCollection() {
+  if (!canManageCommitments()) {
+    showToast('Only updesh and pratim can record collections', 'error');
+    return;
+  }
   const collectedAmt = parseFloat(document.getElementById('collectedAmountInput').value) || 0;
   const collectionDate = document.getElementById('collectionDateInput').value;
   
@@ -1923,6 +1972,10 @@ async function saveCollection() {
 }
 
 async function deleteCommitment(commitmentId) {
+  if (!canManageCommitments()) {
+    showToast('Only updesh and pratim can delete commitments', 'error');
+    return;
+  }
   if (!confirm('Delete this commitment?')) return;
   if (collectionsData.some(record => record.commitmentId === commitmentId)) {
     showToast('A commitment with recorded payments cannot be deleted', 'error');
@@ -2073,12 +2126,49 @@ function isAdmin() {
   return ['admin', 'tech_admin'].includes(currentUserRole);
 }
 
+function debtUsername() {
+  return String(currentUser || '').trim().toLowerCase();
+}
+
+function canUploadCSV() {
+  return ['dev', 'updesh'].includes(debtUsername());
+}
+
 function isCSVUploader() {
-  return ['csv_upload', 'admin', 'tech_admin'].includes(currentUserRole);
+  return canUploadCSV();
+}
+
+function canManageCommitments() {
+  return ['updesh', 'pratim'].includes(debtUsername());
 }
 
 function canEditAllCommitments() {
-  return ['admin', 'tech_admin'].includes(currentUserRole);
+  return canManageCommitments();
+}
+
+function canAccessDebtOperations() {
+  return canManageCommitments();
+}
+
+function getAllowedDebtTabs() {
+  const allowed = new Set(['summary']);
+  if (canUploadCSV()) allowed.add('upload');
+  if (canAccessDebtOperations()) {
+    allowed.add('linking');
+    allowed.add('commitments');
+    allowed.add('leaderboard');
+  }
+  return allowed;
+}
+
+function applyDebtPermissions() {
+  const allowed = getAllowedDebtTabs();
+  document.querySelectorAll('.tab-btn[data-tab]').forEach(button => {
+    button.style.display = allowed.has(button.dataset.tab) ? '' : 'none';
+  });
+
+  // dev starts on Upload; everyone else starts on the universally visible Summary.
+  switchTab(canUploadCSV() ? 'upload' : 'summary');
 }
 
 function checkAdminNotifications() {
