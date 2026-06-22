@@ -844,7 +844,7 @@ let notificationTimer = null;
 let debtMetaUnsub = null;
 let debtCycleUnsubs = [];
 let autoShownNotificationId = null;
-const DEBT_BUILD = '20260622.4';
+const DEBT_BUILD = '20260622.5';
 
 // ══ WIKI-INTEGRATED AUTHENTICATION ══
 // Check for Wiki session or fallback to standalone mode
@@ -1523,10 +1523,6 @@ function updateLeaderboard() {
 
 // Modal Functions
 async function openLinkModal(customerName) {
-  if (!canAccessDebtOperations()) {
-    showToast('Only updesh and pratim can manage project links', 'error');
-    return;
-  }
   currentCustomer = csvData.find(c => c.customerName === customerName);
   if (!currentCustomer) return;
   
@@ -1648,10 +1644,6 @@ function loadPOs() {
 }
 
 function addAllocation() {
-  if (!canAccessDebtOperations()) {
-    showToast('Only updesh and pratim can manage project links', 'error');
-    return;
-  }
   const projId = document.getElementById('projectSelect').value;
   const isOther = projId === '__other__';
   const otherInput = document.getElementById('otherProjectName');
@@ -1721,10 +1713,6 @@ function deleteAllocation(idx) {
 }
 
 async function saveAllocations() {
-  if (!canAccessDebtOperations()) {
-    showToast('Only updesh and pratim can manage project links', 'error');
-    return;
-  }
   if (!currentCustomer) {
     showToast('No customer selected', 'error');
     return;
@@ -2140,16 +2128,9 @@ function canEditAllCommitments() {
   return canManageCommitments();
 }
 
-function canAccessDebtOperations() {
-  return canManageCommitments();
-}
-
 function getAllowedDebtTabs() {
-  const allowed = new Set(['summary', 'commitments', 'leaderboard']);
+  const allowed = new Set(['summary', 'linking', 'commitments', 'leaderboard']);
   if (canUploadCSV()) allowed.add('upload');
-  if (canAccessDebtOperations()) {
-    allowed.add('linking');
-  }
   return allowed;
 }
 
