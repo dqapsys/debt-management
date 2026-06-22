@@ -798,8 +798,8 @@
       
       <div style="display: flex; gap: 8px;">
         <button class="btn" onclick="closeModal('commitmentReminderModal')" style="flex: 1;">Later</button>
-        <button class="btn primary" onclick="goToSummaryTab()" style="flex: 1;">
-          <i class="ti ti-arrow-right"></i> Go to Summary
+        <button class="btn primary" onclick="goToCommitmentsTab()" style="flex: 1;">
+          <i class="ti ti-arrow-right"></i> Enter Commitments
         </button>
       </div>
     </div>
@@ -844,7 +844,7 @@ let notificationTimer = null;
 let debtMetaUnsub = null;
 let debtCycleUnsubs = [];
 let autoShownNotificationId = null;
-const DEBT_BUILD = '20260622.3';
+const DEBT_BUILD = '20260622.4';
 
 // ══ WIKI-INTEGRATED AUTHENTICATION ══
 // Check for Wiki session or fallback to standalone mode
@@ -1429,9 +1429,10 @@ function updateCommitments() {
         <td style="text-align: center;">${collected}</td>
         <td><span class="badge ${status}">${statusText}</span></td>
         <td style="white-space: nowrap;">
-          <button class="btn sm" onclick="openCommitmentModal('${alloc.id}')" style="margin-right: 4px;">${commit ? 'Edit' : 'Set'}</button>
+          ${!commit ? `<button class="btn sm" onclick="openCommitmentModal('${alloc.id}')" style="margin-right: 4px;">Set</button>` : ''}
+          ${commit && canManageCommitments() ? `<button class="btn sm" onclick="openCommitmentModal('${alloc.id}')" style="margin-right: 4px;">Edit</button>` : ''}
           ${commit ? `<button class="btn sm primary" onclick="openCollectionModal('${commit.id}')" style="margin-right: 4px;">💰 Record</button>` : ''}
-          ${commit ? `<button class="btn sm" onclick="deleteCommitment('${commit.id}')" style="background: #ffebee; color: #c00; border-color: #ffcdd2;">✕</button>` : ''}
+          ${commit && canManageCommitments() ? `<button class="btn sm" onclick="deleteCommitment('${commit.id}')" style="background: #ffebee; color: #c00; border-color: #ffcdd2;">✕</button>` : ''}
         </td>
       </tr>
     `;
@@ -1812,13 +1813,14 @@ async function loadWikiUsers(selectedCommitment = null) {
 }
 
 async function openCommitmentModal(allocId) {
-  if (!canManageCommitments()) {
-    showToast('Only updesh and pratim can set or edit commitments', 'error');
+  const existingCommitment = commitmentsData.find(c => c.allocationId === allocId);
+  if (existingCommitment && !canManageCommitments()) {
+    showToast('Only updesh and pratim can edit an existing commitment', 'error');
     return;
   }
   currentAllocationId = allocId;
   const alloc = allocationsData.find(a => a.id === allocId);
-  const commit = commitmentsData.find(c => c.allocationId === allocId);
+  const commit = existingCommitment;
   
   if (!alloc) return;
   
@@ -1839,10 +1841,6 @@ async function openCommitmentModal(allocId) {
 }
 
 async function saveCommitment() {
-  if (!canManageCommitments()) {
-    showToast('Only updesh and pratim can set or edit commitments', 'error');
-    return;
-  }
   const assignedSelect = document.getElementById('assignedTo');
   const selectedOption = assignedSelect.options[assignedSelect.selectedIndex];
   const assignedUsername = assignedSelect.value.startsWith('legacy:') ? '' : assignedSelect.value;
@@ -1857,6 +1855,10 @@ async function saveCommitment() {
   const alloc = allocationsData.find(a => a.id === currentAllocationId);
   
   const existingCommitment = commitmentsData.find(c => c.allocationId === currentAllocationId);
+  if (existingCommitment && !canManageCommitments()) {
+    showToast('Only updesh and pratim can edit an existing commitment', 'error');
+    return;
+  }
   const commitmentId = existingCommitment?.id || db.collection(DEBT_COMMITMENTS_COLLECTION).doc().id;
   const newCommit = {
     id: commitmentId,
@@ -1896,10 +1898,6 @@ async function saveCommitment() {
 }
 
 function openCollectionModal(commitmentId) {
-  if (!canManageCommitments()) {
-    showToast('Only updesh and pratim can record collections', 'error');
-    return;
-  }
   const commit = commitmentsData.find(c => c.id === commitmentId);
   if (!commit) return;
   
@@ -1912,10 +1910,6 @@ function openCollectionModal(commitmentId) {
 }
 
 async function saveCollection() {
-  if (!canManageCommitments()) {
-    showToast('Only updesh and pratim can record collections', 'error');
-    return;
-  }
   const collectedAmt = parseFloat(document.getElementById('collectedAmountInput').value) || 0;
   const collectionDate = document.getElementById('collectionDateInput').value;
   
@@ -2151,12 +2145,10 @@ function canAccessDebtOperations() {
 }
 
 function getAllowedDebtTabs() {
-  const allowed = new Set(['summary']);
+  const allowed = new Set(['summary', 'commitments', 'leaderboard']);
   if (canUploadCSV()) allowed.add('upload');
   if (canAccessDebtOperations()) {
     allowed.add('linking');
-    allowed.add('commitments');
-    allowed.add('leaderboard');
   }
   return allowed;
 }
@@ -2323,6 +2315,13 @@ function goToSummaryTab() {
   closeModal('commitmentReminderModal');
   hideNotificationBadge();
   switchTab('summary');
+}
+
+function goToCommitmentsTab() {
+  markCurrentUploadNoticeSeen();
+  closeModal('commitmentReminderModal');
+  hideNotificationBadge();
+  switchTab('commitments');
 }
 
 // Toast
