@@ -1,5 +1,6 @@
 
 
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -413,7 +414,7 @@
     <div style="display: flex; justify-content: space-between; align-items: center;">
       <div>
         <h1><i class="ti ti-coin"></i> Debt Management</h1>
-        <p>Track customer debts, link to projects, manage collections</p>
+        <p>Assign customers, create PO commitments and manage collections</p>
       </div>
       <div style="background: rgba(255,255,255,0.2); padding: 12px 16px; border-radius: 8px; backdrop-filter: blur(10px);">
         <div style="font-size: 11px; opacity: 0.9; margin-bottom: 6px;">LOGGED IN AS</div>
@@ -425,7 +426,6 @@
   <div class="tabs">
     <button class="tab-btn active" data-tab="upload" data-debt-operator onclick="switchTab('upload', this)">📤 Upload CSV</button>
     <button class="tab-btn" data-tab="summary" onclick="switchTab('summary', this)">📊 Summary</button>
-    <button class="tab-btn" data-tab="linking" data-debt-operator onclick="switchTab('linking', this)">🔗 Link Projects</button>
     <button class="tab-btn" data-tab="commitments" data-debt-operator onclick="switchTab('commitments', this)">📅 Commitments</button>
     <button class="tab-btn" data-tab="leaderboard" data-debt-operator onclick="switchTab('leaderboard', this)">🏆 Leaderboard</button>
   </div>
@@ -441,7 +441,7 @@
     </div>
     <div id="debtCycleInfo" style="margin-bottom:14px;padding:10px 12px;background:#E4F1FA;border-left:4px solid var(--p);border-radius:6px;font-size:11px;color:var(--t2)"></div>
     
-    <div class="card">
+    <div class="card" style="overflow-x:auto">
       <table>
         <thead>
           <tr>
@@ -466,7 +466,7 @@
         <div class="stat-icon">💰</div>
         <div>
           <div class="stat-value" id="statOutstanding">₹0</div>
-          <div class="stat-label">Outstanding</div>
+          <div class="stat-label">Net Outstanding</div>
         </div>
       </div>
       <div class="stat">
@@ -492,21 +492,26 @@
       </div>
     </div>
     
-    <div class="card">
+    <div class="card" style="overflow-x:auto">
       <table>
         <thead>
           <tr>
             <th>Customer</th>
             <th>Linked Project</th>
-            <th style="text-align: right;">Outstanding</th>
+            <th style="text-align: right;">Opening</th>
+            <th style="text-align: right;">Billed</th>
+            <th style="text-align: right;">Tally Collected<br><span style="font-size:9px;font-weight:500">Reference</span></th>
+            <th style="text-align: right;">Outstanding<br><span style="font-size:9px;font-weight:500">Tally</span></th>
+            <th style="text-align: right;">Net Outstanding</th>
             <th style="text-align: right;">Allocated</th>
             <th style="text-align: right;">Committed</th>
             <th style="text-align: right;">Collected</th>
             <th>Status</th>
+            <th>Assigned Users</th>
           </tr>
         </thead>
         <tbody id="summaryTable">
-          <tr><td colspan="7" style="text-align: center; color: var(--t2);">No data yet</td></tr>
+          <tr><td colspan="12" style="text-align: center; color: var(--t2);">No data yet</td></tr>
         </tbody>
       </table>
     </div>
@@ -535,6 +540,10 @@
   
   <!-- Commitments Tab -->
   <div id="commitments" class="tab-content">
+    <div class="card" style="margin-bottom:14px">
+      <h3 style="margin-bottom:10px">My Assigned Customers</h3>
+      <div id="assignedCustomersPanel"><div style="color:var(--t2);font-size:12px">No customers assigned.</div></div>
+    </div>
     <div class="card">
       <table>
         <thead>
@@ -545,7 +554,7 @@
             <th style="text-align: right;">Amount</th>
             <th>Assigned</th>
             <th>Date</th>
-            <th style="text-align: center;">Collected</th>
+            <th style="text-align: center;">Collected / Deductions</th>
             <th>Status</th>
             <th>Action</th>
           </tr>
@@ -572,7 +581,7 @@
 <!-- Link Modal -->
 <div id="linkModal" class="modal">
   <div class="modal-content">
-    <div class="modal-header">Link Customer to Projects</div>
+    <div class="modal-header">Link Customer to Project / PO and Commit</div>
     
     <div class="form-group">
       <label>Customer</label>
@@ -613,14 +622,19 @@
     </div>
     
     <div class="form-group">
-      <label>Amount to Allocate *</label>
+      <label>Amount Committed *</label>
       <input type="number" id="allocationAmount" placeholder="0" min="0" step="0.01">
     </div>
+
+    <div class="form-group">
+      <label>Commitment Date *</label>
+      <input type="date" id="allocationCommitDate">
+    </div>
     
-    <button class="btn primary" onclick="addAllocation()" style="width: 100%; margin-bottom: 12px;">+ Add Allocation</button>
+    <button class="btn primary" onclick="addAllocation()" style="width: 100%; margin-bottom: 12px;">+ Add Commitment</button>
     
     <div style="background: #f9f9f9; border-radius: 7px; padding: 12px; margin-bottom: 12px; max-height: 200px; overflow-y: auto;">
-      <div style="font-size: 11px; font-weight: 600; margin-bottom: 8px;">CURRENT ALLOCATIONS:</div>
+      <div style="font-size: 11px; font-weight: 600; margin-bottom: 8px;">CUSTOMER COMMITMENTS:</div>
       <div id="allocationsList">
         <div style="color: var(--t2); text-align: center; font-size: 11px;">No allocations yet</div>
       </div>
@@ -707,6 +721,13 @@
     <div class="form-group">
       <label>Collection Date *</label>
       <input type="date" id="collectionDateInput" required>
+    </div>
+
+    <div class="form-group">
+      <label>Deductions</label>
+      <div id="deductionRows"></div>
+      <button type="button" class="btn sm" onclick="addDeductionRow()" style="margin-top:7px">+ Add Deduction</button>
+      <div style="font-size:10px;color:var(--t2);margin-top:5px">Supported: TDS, TCS, LD and Other. Other requires remarks.</div>
     </div>
     
     <div style="display: flex; gap: 8px;">
@@ -831,6 +852,7 @@ const DEBT_CYCLES_COLLECTION = 'dqap_debt_cycles';
 const DEBT_ALLOCATIONS_COLLECTION = 'dqap_debt_allocations';
 const DEBT_COMMITMENTS_COLLECTION = 'dqap_debt_commitments';
 const DEBT_COLLECTIONS_COLLECTION = 'dqap_debt_collections';
+const DEBT_ASSIGNMENTS_COLLECTION = 'dqap_debt_customer_assignments';
 
 // Current User State
 let currentUser = null;
@@ -844,7 +866,7 @@ let notificationTimer = null;
 let debtMetaUnsub = null;
 let debtCycleUnsubs = [];
 let autoShownNotificationId = null;
-const DEBT_BUILD = '20260622.5';
+const DEBT_BUILD = '20260624.1';
 
 // ══ WIKI-INTEGRATED AUTHENTICATION ══
 // Check for Wiki session or fallback to standalone mode
@@ -938,6 +960,7 @@ async function autoLoginFromWiki(session) {
       
       // Load local fallback first, then replace it with the shared Firestore cycle.
       loadFromLocalStorage();
+      await loadDebtUsers();
       await loadDebtStateFromFirestore();
       updateAllTabs();
       loadProjects();
@@ -967,10 +990,12 @@ let csvData = [];
 let allocationsData = [];
 let commitmentsData = [];
 let collectionsData = [];
+let assignmentsData = [];
 let projectsData = [];
 let wikiUsers = [];
 let currentCustomer = null;
 let tempAllocations = [];
+let currentManagedAllocationIds = [];
 let currentAllocationId = null;
 let currentCommitmentId = null;
 let csvFile = null;
@@ -987,6 +1012,8 @@ function applyCollectionLedgerTotals() {
   commitmentsData.forEach(commitment => {
     const records = collectionsData.filter(record => record.commitmentId === commitment.id);
     commitment.collected = records.reduce((sum, record) => sum + Number(record.amount || 0), 0);
+    commitment.deductions = records.reduce((sum, record) => sum + Number(record.deductionTotal || 0), 0);
+    commitment.settled = commitment.collected + commitment.deductions;
     commitment.collectionDate = records.sort((a, b) => String(b.collectionDate || '').localeCompare(String(a.collectionDate || '')))[0]?.collectionDate || null;
   });
 }
@@ -998,11 +1025,12 @@ async function loadDebtStateFromFirestore() {
     const cycleId = latestUploadInfo?.cycleId;
     if (!cycleId) return false;
 
-    const [cycleDoc, allocationSnap, commitmentSnap, collectionSnap] = await Promise.all([
+    const [cycleDoc, allocationSnap, commitmentSnap, collectionSnap, assignmentSnap] = await Promise.all([
       db.collection(DEBT_CYCLES_COLLECTION).doc(cycleId).get(),
       db.collection(DEBT_ALLOCATIONS_COLLECTION).where('cycleId', '==', cycleId).get(),
       db.collection(DEBT_COMMITMENTS_COLLECTION).where('cycleId', '==', cycleId).get(),
-      db.collection(DEBT_COLLECTIONS_COLLECTION).where('cycleId', '==', cycleId).get()
+      db.collection(DEBT_COLLECTIONS_COLLECTION).where('cycleId', '==', cycleId).get(),
+      db.collection(DEBT_ASSIGNMENTS_COLLECTION).get()
     ]);
     if (!cycleDoc.exists) return false;
 
@@ -1011,6 +1039,8 @@ async function loadDebtStateFromFirestore() {
     allocationsData = allocationSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     commitmentsData = commitmentSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     collectionsData = collectionSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    assignmentsData = assignmentSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    await loadDebtUsers();
     applyCollectionLedgerTotals();
     saveToLocalStorage();
     startDebtCycleListeners();
@@ -1039,6 +1069,10 @@ function startDebtCycleListeners() {
     db.collection(DEBT_COLLECTIONS_COLLECTION).where('cycleId', '==', currentCycleId).onSnapshot(snapshot => {
       collectionsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       applyCollectionLedgerTotals(); updateAllTabs(); saveToLocalStorage();
+    }, onError),
+    db.collection(DEBT_ASSIGNMENTS_COLLECTION).onSnapshot(snapshot => {
+      assignmentsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      updateAllTabs();
     }, onError)
   );
 }
@@ -1262,6 +1296,79 @@ function parseIndianNumber(str) {
   return parseFloat((str || '').replace(/[₹,]/g, '')) || 0;
 }
 
+function escapeDebtHtml(value) {
+  return String(value ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+}
+
+async function loadDebtUsers() {
+  try {
+    const snapshot = await db.collection('dqap_users').get();
+    wikiUsers = snapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        username: String(data.username || '').trim().toLowerCase(),
+        fullName: String(data.fullName || data.displayName || data.username || '').trim(),
+        role: data.role || (data.isAdmin ? 'admin' : 'user'),
+        active: data.active !== false && data.disabled !== true
+      };
+    }).filter(user => user.username && user.active).sort((a,b) => a.fullName.localeCompare(b.fullName));
+  } catch (error) {
+    console.warn('Could not load Wiki users:', error);
+  }
+  return wikiUsers;
+}
+
+function canAssignDebtCustomers() { return ['pratim','updesh'].includes(debtUsername()); }
+function canSeeAllDebtCustomers() { return ['dev','pratim','updesh'].includes(debtUsername()); }
+function customerAssignment(customerName) { return assignmentsData.find(item => item.customer === customerName) || null; }
+function customerAssignedUsers(customerName) { return customerAssignment(customerName)?.assignedUsers || []; }
+function canPlanDebtCustomer(customerName) { return canAssignDebtCustomers() || customerAssignedUsers(customerName).some(user => user.username === debtUsername()); }
+function visibleDebtCustomers() {
+  if (canSeeAllDebtCustomers()) return csvData;
+  return csvData.filter(customer => customerAssignedUsers(customer.customerName).some(user => user.username === debtUsername()));
+}
+function customerSettlement(customerName) {
+  return collectionsData.filter(record => record.cycleId === currentCycleId && record.customer === customerName)
+    .reduce((totals, record) => {
+      totals.collected += Number(record.amount || 0);
+      totals.deductions += Number(record.deductionTotal || 0);
+      return totals;
+    }, { collected: 0, deductions: 0 });
+}
+
+async function saveCustomerAssignment(customerName, select) {
+  if (!canAssignDebtCustomers()) { showToast('Only pratim and updesh can assign customers', 'error'); updateSummary(); return; }
+  const assignedUsers = Array.from(select.selectedOptions).map(option => ({ username: option.value, fullName: option.dataset.name || option.textContent }));
+  const existing = customerAssignment(customerName);
+  try {
+    if (!assignedUsers.length && existing) {
+      await db.collection(DEBT_ASSIGNMENTS_COLLECTION).doc(existing.id).delete();
+      assignmentsData = assignmentsData.filter(item => item.id !== existing.id);
+    } else if (assignedUsers.length) {
+      const id = existing?.id || db.collection(DEBT_ASSIGNMENTS_COLLECTION).doc().id;
+      const record = { customer: customerName, assignedUsers, updatedBy: currentUser, updatedAt: new Date() };
+      await db.collection(DEBT_ASSIGNMENTS_COLLECTION).doc(id).set(record, { merge: true });
+      assignmentsData = assignmentsData.filter(item => item.customer !== customerName);
+      assignmentsData.push({ id, ...record });
+    }
+    updateAllTabs();
+    showToast('Customer assignment saved', 'success');
+  } catch (error) {
+    showToast('Could not save assignment: ' + error.message, 'error');
+    updateSummary();
+  }
+}
+
+function renderCustomerAssignmentCell(customerName) {
+  const assigned = customerAssignedUsers(customerName);
+  if (!canAssignDebtCustomers()) {
+    return assigned.length ? assigned.map(user => `<span class="badge pending" style="margin:2px">${escapeDebtHtml(user.fullName || user.username)}</span>`).join('') : '<span style="color:var(--t2)">Unassigned</span>';
+  }
+  const selected = new Set(assigned.map(user => user.username));
+  const options = wikiUsers.map(user => `<option value="${escapeDebtHtml(user.username)}" data-name="${escapeDebtHtml(user.fullName)}"${selected.has(user.username)?' selected':''}>${escapeDebtHtml(user.fullName)} (${escapeDebtHtml(user.username)})</option>`).join('');
+  return `<select multiple size="3" data-customer="${escapeDebtHtml(customerName)}" onchange="saveCustomerAssignment(this.dataset.customer,this)" style="min-width:190px;font-size:10.5px;padding:4px">${options}</select><div style="font-size:9px;color:var(--t2);margin-top:3px">Ctrl-click to select multiple</div>`;
+}
+
 // Update Functions
 function updateAllTabs() {
   updateCSVPreview();
@@ -1290,12 +1397,15 @@ function updateCSVPreview() {
 }
 
 function updateSummary() {
-  if (csvData.length === 0) return;
-  
-  const totalOut = csvData.reduce((s, r) => s + r.outstanding, 0);
-  const totalAlloc = allocationsData.reduce((s, a) => s + (a.amount || 0), 0);
-  const totalCommit = commitmentsData.reduce((s, c) => s + (c.amount || 0), 0);
-  const totalCollect = collectionsData.filter(record => record.cycleId === currentCycleId).reduce((s, record) => s + Number(record.amount || 0), 0);
+  const customers = visibleDebtCustomers();
+  const visibleNames = new Set(customers.map(customer => customer.customerName));
+  const totalOut = customers.reduce((sum, customer) => {
+    const settlement = customerSettlement(customer.customerName);
+    return sum + Math.max(0, Number(customer.outstanding || 0) - settlement.collected - settlement.deductions);
+  }, 0);
+  const totalAlloc = allocationsData.filter(item => visibleNames.has(item.customer)).reduce((s, a) => s + Number(a.amount || 0), 0);
+  const totalCommit = commitmentsData.filter(item => visibleNames.has(item.customer)).reduce((s, c) => s + Number(c.amount || 0), 0);
+  const totalCollect = collectionsData.filter(record => record.cycleId === currentCycleId && visibleNames.has(record.customer)).reduce((s, record) => s + Number(record.amount || 0), 0);
   
   document.getElementById('statOutstanding').textContent = `₹${totalOut.toLocaleString('en-IN')}`;
   document.getElementById('statAllocated').textContent = `₹${totalAlloc.toLocaleString('en-IN')}`;
@@ -1304,7 +1414,7 @@ function updateSummary() {
   document.getElementById('debtCycleInfo').innerHTML = `<b style="color:var(--p)">Current weekly cycle: ${currentCycleId || 'Local fallback'}</b> · Uploaded Outstanding is treated as the Tally-adjusted source of truth. The CSV Collected column is retained only for reconciliation and is never subtracted again. This cycle’s manual collections start at zero and remain archived in the permanent ledger.`;
   
   const tbody = document.getElementById('summaryTable');
-  tbody.innerHTML = csvData.map(customer => {
+  const summaryRows = customers.map(customer => {
     const customerAllocations = allocationsData.filter(a => a.customer === customer.customerName);
     const allocated = customerAllocations.reduce((s, a) => s + a.amount, 0);
     const linkedProjects = [...new Set(customerAllocations.map(a => a.project).filter(Boolean))];
@@ -1312,7 +1422,11 @@ function updateSummary() {
     const commitments = commitmentsData.filter(c => c.customer === customer.customerName);
     const committed = commitments.reduce((s, c) => s + c.amount, 0);
     const commitmentIds = new Set(commitments.map(commitment => commitment.id));
-    const collected = collectionsData.filter(record => record.cycleId === currentCycleId && commitmentIds.has(record.commitmentId)).reduce((sum, record) => sum + Number(record.amount || 0), 0);
+    const records = collectionsData.filter(record => record.cycleId === currentCycleId && commitmentIds.has(record.commitmentId));
+    const collected = records.reduce((sum, record) => sum + Number(record.amount || 0), 0);
+    const deductions = records.reduce((sum, record) => sum + Number(record.deductionTotal || 0), 0);
+    const settled = collected + deductions;
+    const netOutstanding = Math.max(0, Number(customer.outstanding || 0) - settled);
     
     // Status based on actual collection progress and dates
     let status = 'pending';
@@ -1320,12 +1434,12 @@ function updateSummary() {
     const today = new Date().toISOString().split('T')[0];
     
     if (committed > 0) {
-      if (collected >= committed) {
+      if (settled >= committed) {
         status = 'success';
         statusText = '✓ Collected';
-      } else if (collected > 0) {
+      } else if (settled > 0) {
         status = 'warning';
-        statusText = `Partial (₹${collected.toLocaleString('en-IN')})`;
+        statusText = `Partial (₹${settled.toLocaleString('en-IN')})`;
       } else {
         // Check if delayed
         const latestCommitDate = Math.max(...commitments.map(c => new Date(c.commitDate).getTime()));
@@ -1348,14 +1462,20 @@ function updateSummary() {
       <tr>
         <td><strong>${customer.customerName}</strong></td>
         <td>${linkedProjectText}</td>
-        <td style="text-align: right;">₹${customer.outstanding.toLocaleString('en-IN')}</td>
+        <td style="text-align:right">₹${Number(customer.opening || 0).toLocaleString('en-IN')}</td>
+        <td style="text-align:right">₹${Number(customer.billed || 0).toLocaleString('en-IN')}</td>
+        <td style="text-align:right">₹${Number(customer.collected || 0).toLocaleString('en-IN')}</td>
+        <td style="text-align:right">₹${Number(customer.outstanding || 0).toLocaleString('en-IN')}</td>
+        <td style="text-align:right;font-weight:700;color:${netOutstanding < Number(customer.outstanding || 0) ? '#3F704D' : 'inherit'}">₹${netOutstanding.toLocaleString('en-IN')}${deductions?`<div style="font-size:9px;color:var(--t2)">incl. ₹${deductions.toLocaleString('en-IN')} deductions</div>`:''}</td>
         <td style="text-align: right;">₹${allocated.toLocaleString('en-IN')}</td>
         <td style="text-align: right;">₹${committed.toLocaleString('en-IN')}</td>
         <td style="text-align: right;">₹${collected.toLocaleString('en-IN')}</td>
         <td><span class="badge ${status}">${statusText}</span></td>
+        <td>${renderCustomerAssignmentCell(customer.customerName)}</td>
       </tr>
     `;
   }).join('');
+  tbody.innerHTML = summaryRows || '<tr><td colspan="12" style="text-align:center;color:var(--t2)">No customers are currently assigned to you.</td></tr>';
 }
 
 function updateLinking() {
@@ -1386,12 +1506,27 @@ function updateLinking() {
 
 function updateCommitments() {
   const tbody = document.getElementById('commitmentsTable');
-  if (allocationsData.length === 0) {
+  const customers = visibleDebtCustomers();
+  const visibleNames = new Set(customers.map(customer => customer.customerName));
+  const panel = document.getElementById('assignedCustomersPanel');
+  panel.innerHTML = customers.length ? customers.map(customer => {
+    const settlement = customerSettlement(customer.customerName);
+    const net = Math.max(0, Number(customer.outstanding || 0) - settlement.collected - settlement.deductions);
+    const users = customerAssignedUsers(customer.customerName).map(user => escapeDebtHtml(user.fullName || user.username)).join(', ') || 'Unassigned';
+    return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 10px;border-bottom:1px solid var(--bd)"><div><b>${escapeDebtHtml(customer.customerName)}</b><div style="font-size:10px;color:var(--t2)">${users} · Net outstanding ₹${net.toLocaleString('en-IN')}</div></div>${canPlanDebtCustomer(customer.customerName)?`<button class="btn sm primary" data-customer="${escapeDebtHtml(customer.customerName)}" onclick="openLinkModal(this.dataset.customer)">Link PO & Commit</button>`:'<span style="font-size:10px;color:var(--t2)">View only</span>'}</div>`;
+  }).join('') : '<div style="color:var(--t2);font-size:12px">No customers are currently assigned to you.</div>';
+  const visibleAllocations = allocationsData.filter(allocation => {
+    if (!visibleNames.has(allocation.customer)) return false;
+    if (canSeeAllDebtCustomers()) return true;
+    const commitment = commitmentsData.find(item => item.allocationId === allocation.id);
+    return !commitment || commitment.assignedUsername === debtUsername();
+  });
+  if (visibleAllocations.length === 0) {
     tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: var(--t2);">No allocations yet</td></tr>';
     return;
   }
   
-  tbody.innerHTML = allocationsData.map(alloc => {
+  tbody.innerHTML = visibleAllocations.map(alloc => {
     const commit = commitmentsData.find(c => c.allocationId === alloc.id);
     
     let status = 'pending';
@@ -1399,10 +1534,10 @@ function updateCommitments() {
     
     if (commit) {
       const today = new Date().toISOString().split('T')[0];
-      if (commit.collected >= commit.amount) {
+      if ((commit.settled || 0) >= commit.amount) {
         status = 'success';
         statusText = '✓ Collected';
-      } else if (commit.collected > 0) {
+      } else if ((commit.settled || 0) > 0) {
         status = 'warning';
         statusText = `Partial`;
       } else if (today > commit.commitDate) {
@@ -1416,7 +1551,7 @@ function updateCommitments() {
     
     const assigned = commit ? commit.assignedTo : '-';
     const commitDate = commit ? new Date(commit.commitDate).toLocaleDateString('en-IN') : '-';
-    const collected = commit ? `₹${commit.collected.toLocaleString('en-IN')}` : '-';
+    const collected = commit ? `₹${Number(commit.collected || 0).toLocaleString('en-IN')}${Number(commit.deductions || 0)?`<div style="font-size:9px;color:var(--t2)">+ ₹${Number(commit.deductions || 0).toLocaleString('en-IN')} deductions</div>`:''}` : '-';
     
     return `
       <tr>
@@ -1429,7 +1564,7 @@ function updateCommitments() {
         <td style="text-align: center;">${collected}</td>
         <td><span class="badge ${status}">${statusText}</span></td>
         <td style="white-space: nowrap;">
-          ${!commit ? `<button class="btn sm" onclick="openCommitmentModal('${alloc.id}')" style="margin-right: 4px;">Set</button>` : ''}
+          ${!commit && canPlanDebtCustomer(alloc.customer) ? `<button class="btn sm" data-customer="${escapeDebtHtml(alloc.customer)}" onclick="openLinkModal(this.dataset.customer)" style="margin-right:4px">Complete Plan</button>` : ''}
           ${commit && canManageCommitments() ? `<button class="btn sm" onclick="openCommitmentModal('${alloc.id}')" style="margin-right: 4px;">Edit</button>` : ''}
           ${commit ? `<button class="btn sm primary" onclick="openCollectionModal('${commit.id}')" style="margin-right: 4px;">💰 Record</button>` : ''}
           ${commit && canManageCommitments() ? `<button class="btn sm" onclick="deleteCommitment('${commit.id}')" style="background: #ffebee; color: #c00; border-color: #ffcdd2;">✕</button>` : ''}
@@ -1525,17 +1660,34 @@ function updateLeaderboard() {
 async function openLinkModal(customerName) {
   currentCustomer = csvData.find(c => c.customerName === customerName);
   if (!currentCustomer) return;
+  if (!canPlanDebtCustomer(customerName)) {
+    currentCustomer = null;
+    showToast('This customer is not assigned to you', 'error');
+    return;
+  }
   
-  tempAllocations = [...allocationsData.filter(a => a.customer === customerName)];
+  const customerAllocations = allocationsData.filter(a => a.customer === customerName);
+  const managedAllocations = canAssignDebtCustomers() ? customerAllocations : customerAllocations.filter(allocation => {
+    const commitment = commitmentsData.find(item => item.allocationId === allocation.id);
+    return commitment ? commitment.assignedUsername === debtUsername() : true;
+  });
+  currentManagedAllocationIds = managedAllocations.map(allocation => allocation.id);
+  tempAllocations = managedAllocations.map(allocation => ({
+    ...allocation,
+    commitDate: commitmentsData.find(commitment => commitment.allocationId === allocation.id)?.commitDate || ''
+  }));
   const allocated = allocationsData.filter(a => a.customer === customerName).reduce((s, a) => s + a.amount, 0);
+  const settlement = customerSettlement(customerName);
+  const netOutstanding = Math.max(0, Number(currentCustomer.outstanding || 0) - settlement.collected - settlement.deductions);
   
   document.getElementById('modalCustomer').value = customerName;
-  document.getElementById('modalOutstanding').value = `₹${currentCustomer.outstanding.toLocaleString('en-IN')}`;
-  document.getElementById('modalRemaining').value = `₹${(currentCustomer.outstanding - allocated).toLocaleString('en-IN')}`;
+  document.getElementById('modalOutstanding').value = `₹${netOutstanding.toLocaleString('en-IN')} net`;
+  document.getElementById('modalRemaining').value = `₹${Math.max(0, netOutstanding - allocated).toLocaleString('en-IN')}`;
   
   document.getElementById('projectSelect').innerHTML = '<option value="">-- Select Project --</option>';
   document.getElementById('poSelect').innerHTML = '<option value="">-- Select PO --</option>';
   document.getElementById('allocationAmount').value = '';
+  document.getElementById('allocationCommitDate').value = new Date().toISOString().split('T')[0];
   document.getElementById('otherProjectName').value = '';
   document.getElementById('otherProjectGroup').style.display = 'none';
   document.getElementById('poSelect').disabled = false;
@@ -1650,8 +1802,9 @@ function addAllocation() {
   const otherName = otherInput.value.trim().replace(/^other\s*[-:]\s*/i, '').replace(/[<>]/g, '');
   const poNum = isOther ? 'N/A' : document.getElementById('poSelect').value;
   const amount = parseFloat(document.getElementById('allocationAmount').value) || 0;
+  const commitDate = document.getElementById('allocationCommitDate').value;
 
-  if (!projId || !poNum || amount <= 0) {
+  if (!projId || !poNum || amount <= 0 || !commitDate) {
     showToast('Please fill all fields', 'error');
     return;
   }
@@ -1669,13 +1822,22 @@ function addAllocation() {
   }
 
   const projectLabel = isOther ? `Other-${otherName}` : proj.name;
+  const settlement = customerSettlement(currentCustomer.customerName);
+  const netOutstanding = Math.max(0, Number(currentCustomer.outstanding || 0) - settlement.collected - settlement.deductions);
+  const otherPlanned = allocationsData.filter(allocation => allocation.customer === currentCustomer.customerName && !currentManagedAllocationIds.includes(allocation.id)).reduce((sum, allocation) => sum + Number(allocation.amount || 0), 0);
+  const alreadyPlanned = tempAllocations.reduce((sum, allocation) => sum + Number(allocation.amount || 0), 0);
+  if (otherPlanned + alreadyPlanned + amount > netOutstanding) {
+    showToast(`Commitments cannot exceed net outstanding of ₹${netOutstanding.toLocaleString('en-IN')}`, 'error');
+    return;
+  }
   
   tempAllocations.push({
     id: db.collection(DEBT_ALLOCATIONS_COLLECTION).doc().id,
     customer: currentCustomer.customerName,
     project: projectLabel,
     po: poNum,
-    amount: amount
+    amount: amount,
+    commitDate
   });
   
   document.getElementById('projectSelect').value = '';
@@ -1684,6 +1846,7 @@ function addAllocation() {
   document.getElementById('otherProjectName').value = '';
   document.getElementById('otherProjectGroup').style.display = 'none';
   document.getElementById('allocationAmount').value = '';
+  document.getElementById('allocationCommitDate').value = new Date().toISOString().split('T')[0];
   updateAllocationsList();
 }
 
@@ -1699,6 +1862,7 @@ function updateAllocationsList() {
       <div style="flex: 1;">
         <div style="font-weight: 500; font-size: 12px;">${a.project}</div>
         <div style="font-size: 11px; color: var(--t2);">PO: ${a.po}</div>
+        <div style="font-size:11px;color:var(--t2)">Commitment: ${a.commitDate ? new Date(a.commitDate).toLocaleDateString('en-IN') : 'Date required'}</div>
         <div style="font-weight: 600; color: var(--p); margin-top: 4px;">₹${a.amount.toLocaleString('en-IN')}</div>
       </div>
       <button class="btn sm" onclick="deleteAllocation(${idx})" style="background: #ffebee; color: #c00; border-color: #ffcdd2; margin-left: 10px;">✕ Delete</button>
@@ -1717,10 +1881,15 @@ async function saveAllocations() {
     showToast('No customer selected', 'error');
     return;
   }
+  if (tempAllocations.some(allocation => !allocation.commitDate || Number(allocation.amount || 0) <= 0)) {
+    showToast('Every project / PO requires an amount and commitment date', 'error');
+    return;
+  }
 
   try {
-    const removed = allocationsData.filter(a => a.customer === currentCustomer.customerName);
-    const retained = allocationsData.filter(a => a.customer !== currentCustomer.customerName);
+    const managedIds = new Set(currentManagedAllocationIds);
+    const removed = allocationsData.filter(allocation => managedIds.has(allocation.id));
+    const retained = allocationsData.filter(allocation => !managedIds.has(allocation.id));
     const saved = tempAllocations.map(allocation => ({ ...allocation, cycleId: currentCycleId, updatedAt: new Date(), updatedBy: currentUser }));
     const savedIds = new Set(saved.map(allocation => allocation.id));
     const deletedAllocationIds = new Set(removed.filter(allocation => !savedIds.has(allocation.id)).map(allocation => allocation.id));
@@ -1729,9 +1898,26 @@ async function saveAllocations() {
     commitmentsData.filter(commitment => deletedAllocationIds.has(commitment.allocationId))
       .forEach(commitment => batch.delete(db.collection(DEBT_COMMITMENTS_COLLECTION).doc(commitment.id)));
     saved.forEach(allocation => batch.set(db.collection(DEBT_ALLOCATIONS_COLLECTION).doc(allocation.id), allocation));
+    const savedCommitments = saved.map(allocation => {
+      const existing = commitmentsData.find(commitment => commitment.allocationId === allocation.id);
+      const id = existing?.id || db.collection(DEBT_COMMITMENTS_COLLECTION).doc().id;
+      const commitment = {
+        id, cycleId: currentCycleId, allocationId: allocation.id, customer: allocation.customer,
+        amount: Number(allocation.amount || 0), assignedTo: existing?.assignedTo || currentUserData?.fullName || currentUserData?.displayName || currentUser,
+        assignedUsername: existing?.assignedUsername || debtUsername(), commitDate: allocation.commitDate,
+        createdAt: existing?.createdAt || new Date(), updatedAt: new Date(), updatedBy: currentUser
+      };
+      batch.set(db.collection(DEBT_COMMITMENTS_COLLECTION).doc(id), commitment, { merge: true });
+      return { ...existing, ...commitment };
+    });
     await batch.commit();
     allocationsData = [...retained, ...saved];
     commitmentsData = commitmentsData.filter(commitment => !deletedAllocationIds.has(commitment.allocationId));
+    savedCommitments.forEach(commitment => {
+      commitmentsData = commitmentsData.filter(item => item.allocationId !== commitment.allocationId);
+      commitmentsData.push(commitment);
+    });
+    applyCollectionLedgerTotals();
     saveToLocalStorage();
   } catch (error) {
     console.error('Could not save allocations:', error);
@@ -1742,8 +1928,9 @@ async function saveAllocations() {
   updateAllTabs();
   closeModal('linkModal');
   tempAllocations = [];
+  currentManagedAllocationIds = [];
   currentCustomer = null;
-  showToast('✅ Allocations saved', 'success');
+  showToast('✅ Project / PO links and commitments saved', 'success');
 }
 
 async function loadWikiUsers(selectedCommitment = null) {
@@ -1894,12 +2081,36 @@ function openCollectionModal(commitmentId) {
   document.getElementById('colAmount').textContent = commit.amount.toLocaleString('en-IN');
   document.getElementById('collectedAmountInput').value = '';
   document.getElementById('collectionDateInput').value = new Date().toISOString().split('T')[0];
+  document.getElementById('deductionRows').innerHTML = '';
+  addDeductionRow();
   document.getElementById('collectionModal').classList.add('active');
+}
+
+function addDeductionRow() {
+  const container = document.getElementById('deductionRows');
+  const row = document.createElement('div');
+  row.className = 'deduction-row';
+  row.style.cssText = 'display:grid;grid-template-columns:105px 1fr 1.4fr auto;gap:6px;margin-bottom:6px;align-items:center';
+  row.innerHTML = `<select class="deduction-type"><option>TDS</option><option>TCS</option><option>LD</option><option>Other</option></select><input class="deduction-amount" type="number" min="0" step="0.01" placeholder="Amount"><input class="deduction-remarks" type="text" placeholder="Remarks"><button type="button" class="btn sm" onclick="this.closest('.deduction-row').remove()">✕</button>`;
+  container.appendChild(row);
+}
+
+function readDeductions() {
+  const deductions = Array.from(document.querySelectorAll('#deductionRows .deduction-row')).map(row => ({
+    type: row.querySelector('.deduction-type').value,
+    amount: Number(row.querySelector('.deduction-amount').value || 0),
+    remarks: row.querySelector('.deduction-remarks').value.trim()
+  })).filter(item => item.amount > 0);
+  if (deductions.some(item => item.type === 'Other' && !item.remarks)) throw new Error('Remarks are required for Other deductions');
+  return deductions;
 }
 
 async function saveCollection() {
   const collectedAmt = parseFloat(document.getElementById('collectedAmountInput').value) || 0;
   const collectionDate = document.getElementById('collectionDateInput').value;
+  let deductions;
+  try { deductions = readDeductions(); } catch (error) { showToast(error.message, 'error'); return; }
+  const deductionTotal = deductions.reduce((sum, item) => sum + item.amount, 0);
   
   if (!collectionDate) {
     showToast('Please enter collection date', 'error');
@@ -1909,17 +2120,17 @@ async function saveCollection() {
   const commit = commitmentsData.find(c => c.id === currentCommitmentId);
   if (!commit) return;
   
-  if (collectedAmt <= 0) {
-    showToast('Please enter a collection amount greater than zero', 'error');
+  if (collectedAmt + deductionTotal <= 0) {
+    showToast('Enter a collection amount or at least one deduction', 'error');
     return;
   }
-  const remaining = Math.max(0, Number(commit.amount || 0) - Number(commit.collected || 0));
-  if (collectedAmt > remaining) {
-    showToast(`Collection cannot exceed the remaining committed amount of ₹${remaining.toLocaleString('en-IN')}`, 'error');
+  const remaining = Math.max(0, Number(commit.amount || 0) - Number(commit.settled || 0));
+  if (collectedAmt + deductionTotal > remaining) {
+    showToast(`Collection plus deductions cannot exceed the remaining committed amount of ₹${remaining.toLocaleString('en-IN')}`, 'error');
     return;
   }
 
-  const duplicate = collectionsData.some(record => record.commitmentId === commit.id && record.collectionDate === collectionDate && Number(record.amount) === collectedAmt);
+  const duplicate = collectionsData.some(record => record.commitmentId === commit.id && record.collectionDate === collectionDate && Number(record.amount) === collectedAmt && Number(record.deductionTotal || 0) === deductionTotal);
   if (duplicate) {
     showToast('This payment appears to have already been recorded', 'error');
     return;
@@ -1928,7 +2139,7 @@ async function saveCollection() {
   const ref = db.collection(DEBT_COLLECTIONS_COLLECTION).doc();
   const collectionRecord = {
     id: ref.id, cycleId: currentCycleId, commitmentId: commit.id, allocationId: commit.allocationId,
-    customer: commit.customer, amount: collectedAmt, collectionDate, source: 'manual',
+    customer: commit.customer, amount: collectedAmt, deductions, deductionTotal, collectionDate, source: 'manual',
     recordedBy: currentUser, recordedAt: new Date()
   };
   try {
@@ -2129,7 +2340,7 @@ function canEditAllCommitments() {
 }
 
 function getAllowedDebtTabs() {
-  const allowed = new Set(['summary', 'linking', 'commitments', 'leaderboard']);
+  const allowed = new Set(['summary', 'commitments', 'leaderboard']);
   if (canUploadCSV()) allowed.add('upload');
   return allowed;
 }
