@@ -1,7 +1,7 @@
 
 
-
 <!DOCTYPE html>
+<!-- DQAP Debt Management 2026.06.24.2 - visible collection actions -->
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -1513,7 +1513,17 @@ function updateCommitments() {
     const settlement = customerSettlement(customer.customerName);
     const net = Math.max(0, Number(customer.outstanding || 0) - settlement.collected - settlement.deductions);
     const users = customerAssignedUsers(customer.customerName).map(user => escapeDebtHtml(user.fullName || user.username)).join(', ') || 'Unassigned';
-    return `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 10px;border-bottom:1px solid var(--bd)"><div><b>${escapeDebtHtml(customer.customerName)}</b><div style="font-size:10px;color:var(--t2)">${users} · Net outstanding ₹${net.toLocaleString('en-IN')}</div></div>${canPlanDebtCustomer(customer.customerName)?`<button class="btn sm primary" data-customer="${escapeDebtHtml(customer.customerName)}" onclick="openLinkModal(this.dataset.customer)">Link PO & Commit</button>`:'<span style="font-size:10px;color:var(--t2)">View only</span>'}</div>`;
+    const openCommitments = commitmentsData.filter(commitment => commitment.customer === customer.customerName && Number(commitment.settled || 0) < Number(commitment.amount || 0));
+    const recordActions = openCommitments.map(commitment => {
+      const allocation = allocationsData.find(item => item.id === commitment.allocationId);
+      const label = allocation?.po || allocation?.project || 'Commitment';
+      return `<button class="btn sm primary" onclick="openCollectionModal('${commitment.id}')" title="Record collection against ${escapeDebtHtml(label)}"><i class="ti ti-cash"></i> Record ${escapeDebtHtml(label)}</button>`;
+    }).join('');
+    const planAction = canPlanDebtCustomer(customer.customerName)
+      ? `<button class="btn sm" data-customer="${escapeDebtHtml(customer.customerName)}" onclick="openLinkModal(this.dataset.customer)"><i class="ti ti-link"></i> Link PO & Commit</button>`
+      : '';
+    const viewOnly = !recordActions && !planAction ? '<span style="font-size:10px;color:var(--t2)">View only</span>' : '';
+    return `<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px;border-bottom:1px solid var(--bd);flex-wrap:wrap"><div style="min-width:220px;flex:1"><b>${escapeDebtHtml(customer.customerName)}</b><div style="font-size:10px;color:var(--t2)">${users} · Net outstanding ₹${net.toLocaleString('en-IN')}</div>${openCommitments.length?`<div style="font-size:9.5px;color:var(--p);margin-top:3px">${openCommitments.length} open commitment${openCommitments.length===1?'':'s'}</div>`:''}</div><div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">${recordActions}${planAction}${viewOnly}</div></div>`;
   }).join('') : '<div style="color:var(--t2);font-size:12px">No customers are currently assigned to you.</div>';
   const visibleAllocations = allocationsData.filter(allocation => {
     if (!visibleNames.has(allocation.customer)) return false;
