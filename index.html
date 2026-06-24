@@ -252,6 +252,16 @@
       background: var(--pd);
     }
     
+   .btn.commit {
+  background: #2E7D32;
+  border-color: #2E7D32;
+  color: #fff;
+}
+
+.btn.commit:hover {
+  background: #1B5E20;
+  border-color: #1B5E20;
+}
     .btn.sm {
       padding: 6px 10px;
       font-size: 11px;
@@ -1581,7 +1591,7 @@ function updateCommitments() {
       </div>`;
     }).join('');
     const pendingEntries = customerAllocations.filter(allocation => !commitmentsData.some(item => item.allocationId === allocation.id)).map(allocation => `<div class="commitment-entry" style="border-color:#FFE0B2;background:#FFF8E1"><div class="commitment-entry-head"><div class="commitment-entry-title">${escapeDebtHtml(allocation.project || 'Project')}<div style="font-weight:500;color:var(--t2);margin-top:2px">PO: ${escapeDebtHtml(allocation.po || '—')}</div></div><span class="badge warning">Plan Pending</span></div>${canPlanDebtCustomer(customer.customerName)?`<div class="commitment-card-actions"><button class="btn sm primary" data-customer="${escapeDebtHtml(customer.customerName)}" onclick="openLinkModal(this.dataset.customer)"><i class="ti ti-calendar-dollar"></i> Complete Commitment</button></div>`:''}</div>`).join('');
-    const planAction = canPlanDebtCustomer(customer.customerName) ? `<button class="btn sm" data-customer="${escapeDebtHtml(customer.customerName)}" onclick="openLinkModal(this.dataset.customer)"><i class="ti ti-link"></i> Link PO & Commit</button>` : '';
+    const planAction = canPlanDebtCustomer(customer.customerName) ? `<button class="btn sm commit" data-customer="${escapeDebtHtml(customer.customerName)}" onclick="openLinkModal(this.dataset.customer)"><i class="ti ti-link"></i> Link PO & Commit</button>` : '';
     const emptyMessage = !commitmentEntries && !pendingEntries ? '<div style="font-size:10.5px;color:var(--t2);padding:12px 0 2px">No linked projects or commitments yet.</div>' : '';
     return `<article class="commitment-card"><div class="commitment-card-title">${escapeDebtHtml(customer.customerName)}</div><div class="commitment-card-meta">${users}</div><div style="display:flex;justify-content:space-between;gap:10px;margin-top:10px;padding:8px 0;border-top:.5px solid var(--bd);border-bottom:.5px solid var(--bd)"><div><div style="font-size:9px;color:var(--t2);text-transform:uppercase">Reference Outstanding</div><b>₹${Number(customer.outstanding || 0).toLocaleString('en-IN')}</b></div><div style="text-align:right"><div style="font-size:9px;color:var(--t2);text-transform:uppercase">Net Outstanding</div><b style="color:var(--p)">₹${net.toLocaleString('en-IN')}</b></div></div>${commitmentEntries}${pendingEntries}${emptyMessage}<div class="commitment-card-actions">${planAction}</div></article>`;
   }).join('') : '<div style="color:var(--t2);font-size:12px">No customers are currently assigned to you.</div>';
