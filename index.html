@@ -487,6 +487,9 @@
       <div style="margin-top: 16px;">
         <input type="file" id="csvFile" accept=".csv" onchange="handleFileSelect(event)">
         <button class="btn primary" onclick="parseCSV()" style="margin-left: 10px;">Upload & Parse</button>
+        <span id="latestUploadInlineInfo" style="display:inline-flex;align-items:center;margin-left:12px;padding:7px 10px;border-radius:8px;background:#E4F1FA;color:var(--p);font-size:11px;font-weight:700;vertical-align:middle">
+          Last CSV upload: checking...
+        </span>
       </div>
     </div>
     <div id="debtCycleInfo" style="margin-bottom:14px;padding:10px 12px;background:#E4F1FA;border-left:4px solid var(--p);border-radius:6px;font-size:11px;color:var(--t2)"></div>
@@ -936,7 +939,7 @@ let notificationTimer = null;
 let debtMetaUnsub = null;
 let debtCycleUnsubs = [];
 let autoShownNotificationId = null;
-const DEBT_BUILD = '20260624.1';
+const DEBT_BUILD = '20260629.1';
 
 // ══ WIKI-INTEGRATED AUTHENTICATION ══
 // Check for Wiki session or fallback to standalone mode
@@ -1092,6 +1095,7 @@ async function loadDebtStateFromFirestore() {
   try {
     const metaDoc = await db.collection(DEBT_META_COLLECTION).doc(DEBT_LATEST_CSV_DOC).get();
     latestUploadInfo = metaDoc.exists ? metaDoc.data() : null;
+    updateLatestUploadInlineInfo();
     const cycleId = latestUploadInfo?.cycleId;
     if (!cycleId) return false;
 
@@ -1310,6 +1314,7 @@ async function persistUploadedWeeklyCycle() {
       uploadedByName: currentUserData?.fullName || currentUserData?.displayName || currentUser || 'Unknown user',
       customerCount: csvData.length
     };
+    updateLatestUploadInlineInfo();
     await metaRef.set({ ...latestUploadInfo, uploadedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
     startDebtCycleListeners();
     return true;
@@ -1331,6 +1336,7 @@ async function publishCsvUploadNotification() {
     customerCount: csvData.length,
     cycleId: currentCycleId || debtCycleIdForDate(new Date())
   };
+  updateLatestUploadInlineInfo();
 
   try {
     await db.collection(DEBT_META_COLLECTION).doc(DEBT_LATEST_CSV_DOC).set({
@@ -1441,6 +1447,7 @@ function renderCustomerAssignmentCell(customerName) {
 
 // Update Functions
 function updateAllTabs() {
+  updateLatestUploadInlineInfo();
   updateCSVPreview();
   updateSummary();
   updateLinking();
@@ -2534,6 +2541,29 @@ function getLatestUploadDate() {
   return null;
 }
 
+function updateLatestUploadInlineInfo() {
+  const el = document.getElementById('latestUploadInlineInfo');
+  if (!el) return;
+  const uploadDate = getLatestUploadDate();
+  if (!latestUploadInfo || !uploadDate || Number.isNaN(uploadDate.getTime())) {
+    el.textContent = 'Last CSV upload: No upload recorded yet';
+    el.style.background = '#FFF3E0';
+    el.style.color = '#E65100';
+    el.title = 'Dev should upload the latest debt statement CSV.';
+    return;
+  }
+  const uploader = latestUploadInfo.uploadedByName || latestUploadInfo.uploadedBy || 'Unknown user';
+  const uploadedBy = String(latestUploadInfo.uploadedBy || '').toLowerCase();
+  const uploadedByDev = uploadedBy === 'dev';
+  const countText = Number(latestUploadInfo.customerCount || 0)
+    ? ` · ${Number(latestUploadInfo.customerCount || 0).toLocaleString('en-IN')} customers`
+    : '';
+  el.textContent = `Last CSV upload: ${uploadDate.toLocaleString('en-IN')} by ${uploader}${countText}`;
+  el.style.background = uploadedByDev ? '#E8F5E9' : '#FFF8E1';
+  el.style.color = uploadedByDev ? '#2E7D32' : '#E65100';
+  el.title = `Cycle: ${latestUploadInfo.cycleId || 'not recorded'}${uploadedByDev ? '' : ' · Note: expected uploader is dev'}`;
+}
+
 function uploadNoticeSeenKey() {
   return `debt_upload_notice_seen_${String(currentUser || 'unknown').toLowerCase()}`;
 }
@@ -2550,6 +2580,7 @@ function startNotificationMonitor() {
   debtMetaUnsub = db.collection(DEBT_META_COLLECTION).doc(DEBT_LATEST_CSV_DOC).onSnapshot(async doc => {
     const previousCycleId = currentCycleId;
     latestUploadInfo = doc.exists ? doc.data() : null;
+    updateLatestUploadInlineInfo();
     if (latestUploadInfo?.cycleId && latestUploadInfo.cycleId !== previousCycleId) {
       await loadDebtStateFromFirestore();
       updateAllTabs();
@@ -2568,6 +2599,7 @@ async function checkNotifications(useCachedInfo = false) {
     try {
       const statusDoc = await db.collection(DEBT_META_COLLECTION).doc(DEBT_LATEST_CSV_DOC).get();
       latestUploadInfo = statusDoc.exists ? statusDoc.data() : null;
+      updateLatestUploadInlineInfo();
     } catch (error) {
       console.warn('Could not check shared debt notifications:', error);
     }
