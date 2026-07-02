@@ -1,5 +1,6 @@
 
 
+
 <!DOCTYPE html>
 <!-- DQAP Debt Management 2026.06.24.5 - Summary-style commitments table -->
 <html lang="en">
@@ -339,6 +340,56 @@
       background: #FFEBEE;
       color: #C62828;
     }
+
+    .table-tools {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+
+    .table-tools .search {
+      min-width: 260px;
+      flex: 1;
+    }
+
+    .filter-row th {
+      background: #fff;
+      padding: 7px 8px;
+      vertical-align: top;
+    }
+
+    .filter-row input,
+    .filter-row select {
+      width: 100%;
+      min-width: 90px;
+      padding: 5px 7px;
+      font-size: 10.5px;
+      border-radius: 6px;
+    }
+
+    .deadline-list {
+      display: grid;
+      gap: 8px;
+      margin: 12px 0 16px;
+      max-height: 260px;
+      overflow: auto;
+    }
+
+    .deadline-item {
+      border: .5px solid var(--bd);
+      border-left: 4px solid #E65100;
+      border-radius: 8px;
+      padding: 10px 12px;
+      background: #FFF8E1;
+    }
+
+    .deadline-item.overdue {
+      border-left-color: #C62828;
+      background: #FFEBEE;
+    }
     
     .modal {
       display: none;
@@ -494,6 +545,10 @@
     </div>
     <div id="debtCycleInfo" style="margin-bottom:14px;padding:10px 12px;background:#E4F1FA;border-left:4px solid var(--p);border-radius:6px;font-size:11px;color:var(--t2)"></div>
     
+    <div class="table-tools">
+      <input class="search" type="text" id="summarySearch" placeholder="Search Summary..." oninput="setDebtTableFilter('summary','search',this.value)">
+      <button class="btn sm" onclick="resetDebtTableFilters('summary')"><i class="ti ti-filter-x"></i> Clear Filters</button>
+    </div>
     <div class="card" style="overflow-x:auto">
       <table>
         <thead>
@@ -562,6 +617,23 @@
             <th>Status</th>
             <th>Assigned Users</th>
           </tr>
+          <tr class="filter-row">
+            <th><input type="text" placeholder="Customer" oninput="setDebtTableFilter('summary','customer',this.value)"></th>
+            <th><input type="text" placeholder="Project" oninput="setDebtTableFilter('summary','project',this.value)"></th>
+            <th colspan="8"></th>
+            <th>
+              <select onchange="setDebtTableFilter('summary','status',this.value)">
+                <option value="">All</option>
+                <option value="pending">Pending</option>
+                <option value="allocated">Allocated</option>
+                <option value="committed">Committed</option>
+                <option value="partial">Partial</option>
+                <option value="collected">Collected</option>
+                <option value="delayed">Delayed</option>
+              </select>
+            </th>
+            <th><input type="text" placeholder="User" oninput="setDebtTableFilter('summary','assigned',this.value)"></th>
+          </tr>
         </thead>
         <tbody id="summaryTable">
           <tr><td colspan="12" style="text-align: center; color: var(--t2);">No data yet</td></tr>
@@ -596,6 +668,10 @@
     <div class="card" style="margin-bottom:14px">
       <h3 style="margin-bottom:5px">Customer Commitments</h3>
       <div style="font-size:11px;color:var(--t2);margin-bottom:14px">Link projects and POs, manage commitments, and record collections from the table below.</div>
+      <div class="table-tools">
+        <input class="search" type="text" id="commitmentsSearch" placeholder="Search Commitments..." oninput="setDebtTableFilter('commitments','search',this.value)">
+        <button class="btn sm" onclick="resetDebtTableFilters('commitments')"><i class="ti ti-filter-x"></i> Clear Filters</button>
+      </div>
       <div style="overflow-x:auto">
         <table class="commitment-table">
           <thead>
@@ -611,6 +687,24 @@
               <th>Status</th>
               <th>Responsible</th>
               <th>Actions</th>
+            </tr>
+            <tr class="filter-row">
+              <th><input type="text" placeholder="Customer" oninput="setDebtTableFilter('commitments','customer',this.value)"></th>
+              <th><input type="text" placeholder="Project / PO" oninput="setDebtTableFilter('commitments','project',this.value)"></th>
+              <th colspan="6"></th>
+              <th>
+                <select onchange="setDebtTableFilter('commitments','status',this.value)">
+                  <option value="">All</option>
+                  <option value="not linked">Not Linked</option>
+                  <option value="plan pending">Plan Pending</option>
+                  <option value="committed">Committed</option>
+                  <option value="partial">Partial</option>
+                  <option value="collected">Collected</option>
+                  <option value="delayed">Delayed</option>
+                </select>
+              </th>
+              <th><input type="text" placeholder="Responsible" oninput="setDebtTableFilter('commitments','responsible',this.value)"></th>
+              <th></th>
             </tr>
           </thead>
           <tbody id="assignedCustomersPanel"><tr><td colspan="11" style="text-align:center;color:var(--t2)">No customers assigned.</td></tr></tbody>
@@ -900,6 +994,29 @@
   </div>
 </div>
 
+<!-- Commitment Deadline Reminder -->
+<div id="commitmentDeadlineModal" class="modal">
+  <div class="modal-content" style="max-width: 560px;">
+    <div class="modal-header" style="background: linear-gradient(135deg, #E65100, #BF360C); color: #fff; margin: -20px -20px 20px -20px; padding: 20px; border-radius: 10px 10px 0 0;">
+      <i class="ti ti-alert-circle" style="font-size: 20px; margin-right: 10px;"></i>
+      Commitment Due Within 3 Days
+    </div>
+
+    <div style="font-size:13px;line-height:1.55;color:var(--t1);margin-bottom:12px">
+      Assigned users must file collection commitments within 3 days of debt assignment. The items below still need a commitment entry.
+    </div>
+
+    <div id="commitmentDeadlineList" class="deadline-list"></div>
+
+    <div style="display:flex;gap:8px">
+      <button class="btn" onclick="snoozeCommitmentDeadlineReminder()" style="flex:1">Later</button>
+      <button class="btn primary" onclick="goToDeadlineCommitments()" style="flex:1">
+        <i class="ti ti-arrow-right"></i> File Commitments
+      </button>
+    </div>
+  </div>
+</div>
+
 <style>
   @keyframes pulse {
     0%, 100% { opacity: 1; }
@@ -939,7 +1056,13 @@ let notificationTimer = null;
 let debtMetaUnsub = null;
 let debtCycleUnsubs = [];
 let autoShownNotificationId = null;
-const DEBT_BUILD = '20260629.1';
+let debtFilterState = {
+  summary: { search: '', customer: '', project: '', status: '', assigned: '' },
+  commitments: { search: '', customer: '', project: '', status: '', responsible: '' }
+};
+const COMMITMENT_DEADLINE_DAYS = 3;
+const COMMITMENT_DEADLINE_SNOOZE_HOURS = 6;
+const DEBT_BUILD = '20260702.1';
 
 // ══ WIKI-INTEGRATED AUTHENTICATION ══
 // Check for Wiki session or fallback to standalone mode
@@ -1403,6 +1526,86 @@ function visibleDebtCustomers() {
   if (canSeeAllDebtCustomers()) return csvData;
   return csvData.filter(customer => customerAssignedUsers(customer.customerName).some(user => user.username === debtUsername()));
 }
+function debtDateFrom(value) {
+  if (!value) return null;
+  if (value.toDate) return value.toDate();
+  if (value.seconds) return new Date(value.seconds * 1000);
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+function assignmentDate(customerName) {
+  const assignment = customerAssignment(customerName);
+  return debtDateFrom(assignment?.assignedAt || assignment?.updatedAt || assignment?.createdAt);
+}
+function addDebtDays(date, days) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+function debtDaysBetween(from, to) {
+  const start = new Date(from); start.setHours(0,0,0,0);
+  const end = new Date(to); end.setHours(0,0,0,0);
+  return Math.ceil((end - start) / 86400000);
+}
+function responsibleUsersForCustomer(customerName, fallbackCommitment = null) {
+  const assigned = customerAssignedUsers(customerName);
+  if (assigned.length) return assigned;
+  if (fallbackCommitment?.assignedUsername || fallbackCommitment?.assignedTo) {
+    return [{ username: fallbackCommitment.assignedUsername || '', fullName: fallbackCommitment.assignedTo || fallbackCommitment.assignedUsername || '' }];
+  }
+  return [];
+}
+function responsibleTextForCustomer(customerName, fallbackCommitment = null) {
+  const names = responsibleUsersForCustomer(customerName, fallbackCommitment)
+    .map(user => user.fullName || user.username)
+    .filter(Boolean);
+  return names.length ? names.join(', ') : 'Unassigned';
+}
+function commitmentStatusInfo(amount, settled, commitDate) {
+  const today = new Date().toISOString().split('T')[0];
+  if (amount > 0 && settled >= amount) return { text: 'Collected', key: 'collected', badge: 'success' };
+  if (settled > 0) return { text: 'Partial', key: 'partial', badge: 'warning' };
+  if (commitDate && today > commitDate) return { text: 'Delayed', key: 'delayed', badge: 'error' };
+  return { text: 'Committed', key: 'committed', badge: 'success' };
+}
+function textMatchesFilter(value, filter) {
+  return !filter || String(value || '').toLowerCase().includes(String(filter).toLowerCase());
+}
+function setDebtTableFilter(page, key, value) {
+  if (!debtFilterState[page]) return;
+  debtFilterState[page][key] = value;
+  if (page === 'summary') updateSummary();
+  if (page === 'commitments') updateCommitments();
+}
+function resetDebtTableFilters(page) {
+  if (!debtFilterState[page]) return;
+  Object.keys(debtFilterState[page]).forEach(key => debtFilterState[page][key] = '');
+  const tab = document.getElementById(page);
+  if (tab) tab.querySelectorAll('.table-tools input, .filter-row input, .filter-row select').forEach(input => input.value = '');
+  if (page === 'summary') updateSummary();
+  if (page === 'commitments') updateCommitments();
+}
+function hasDebtTableFilters(page) {
+  return Object.values(debtFilterState[page] || {}).some(value => String(value || '').trim());
+}
+function summaryRowMatchesFilters(row) {
+  const f = debtFilterState.summary;
+  const haystack = [row.customer, row.project, row.statusText, row.assignedText].join(' ');
+  return textMatchesFilter(haystack, f.search)
+    && textMatchesFilter(row.customer, f.customer)
+    && textMatchesFilter(row.project, f.project)
+    && textMatchesFilter(row.statusKey, f.status)
+    && textMatchesFilter(row.assignedText, f.assigned);
+}
+function commitmentRowMatchesFilters(row) {
+  const f = debtFilterState.commitments;
+  const haystack = [row.customer, row.project, row.po, row.statusText, row.responsibleText].join(' ');
+  return textMatchesFilter(haystack, f.search)
+    && textMatchesFilter(row.customer, f.customer)
+    && textMatchesFilter(`${row.project} ${row.po}`, f.project)
+    && textMatchesFilter(row.statusKey, f.status)
+    && textMatchesFilter(row.responsibleText, f.responsible);
+}
 function customerSettlement(customerName) {
   return collectionsData.filter(record => record.cycleId === currentCycleId && record.customer === customerName)
     .reduce((totals, record) => {
@@ -1422,7 +1625,7 @@ async function saveCustomerAssignment(customerName, select) {
       assignmentsData = assignmentsData.filter(item => item.id !== existing.id);
     } else if (assignedUsers.length) {
       const id = existing?.id || db.collection(DEBT_ASSIGNMENTS_COLLECTION).doc().id;
-      const record = { customer: customerName, assignedUsers, updatedBy: currentUser, updatedAt: new Date() };
+      const record = { customer: customerName, assignedUsers, assignedAt: existing?.assignedAt || existing?.createdAt || existing?.updatedAt || new Date(), updatedBy: currentUser, updatedAt: new Date() };
       await db.collection(DEBT_ASSIGNMENTS_COLLECTION).doc(id).set(record, { merge: true });
       assignmentsData = assignmentsData.filter(item => item.customer !== customerName);
       assignmentsData.push({ id, ...record });
@@ -1504,6 +1707,7 @@ function updateSummary() {
     const deductions = records.reduce((sum, record) => sum + Number(record.deductionTotal || 0), 0);
     const settled = collected + deductions;
     const netOutstanding = Math.max(0, Number(customer.outstanding || 0) - settled);
+    const assignedText = responsibleTextForCustomer(customer.customerName);
     
     // Status based on actual collection progress and dates
     let status = 'pending';
@@ -1534,11 +1738,19 @@ function updateSummary() {
       status = 'warning';
       statusText = 'Allocated';
     }
+    const statusKey = statusText.toLowerCase().replace(/[^a-z ]/g, '').trim();
+    if (!summaryRowMatchesFilters({
+      customer: customer.customerName,
+      project: linkedProjectText,
+      statusText,
+      statusKey,
+      assignedText
+    })) return '';
     
     return `
       <tr>
-        <td><strong>${customer.customerName}</strong></td>
-        <td>${linkedProjectText}</td>
+        <td><strong>${escapeDebtHtml(customer.customerName)}</strong></td>
+        <td>${escapeDebtHtml(linkedProjectText)}</td>
         <td style="text-align:right">₹${Number(customer.opening || 0).toLocaleString('en-IN')}</td>
         <td style="text-align:right">₹${Number(customer.billed || 0).toLocaleString('en-IN')}</td>
         <td style="text-align:right">₹${Number(customer.collected || 0).toLocaleString('en-IN')}</td>
@@ -1640,6 +1852,15 @@ function updateCommitments() {
       const today = new Date().toISOString().split('T')[0];
       const statusText = settled >= amount ? 'Collected' : settled > 0 ? 'Partial' : today > commitment.commitDate ? 'Delayed' : 'Committed';
       const statusClass = statusText === 'Delayed' ? 'error' : statusText === 'Partial' ? 'warning' : 'success';
+      const responsibleText = responsibleTextForCustomer(customer.customerName, commitment);
+      if (!commitmentRowMatchesFilters({
+        customer: customer.customerName,
+        project: allocation.project || '',
+        po: allocation.po || '',
+        statusText,
+        statusKey: statusText.toLowerCase(),
+        responsibleText
+      })) return '';
       const recordButton = remaining > 0 ? `<button class="btn sm primary" onclick="openCollectionModal('${commitment.id}')"><i class="ti ti-cash"></i> Record</button>` : '';
       const manageButtons = canManageCommitments() ? `<button class="btn sm" onclick="openCommitmentModal('${commitment.allocationId}')"><i class="ti ti-edit"></i></button><button class="btn sm" onclick="deleteCommitment('${commitment.id}')" style="color:#c00;border-color:#ffcdd2"><i class="ti ti-trash"></i></button>` : '';
       return `<tr>
@@ -1652,23 +1873,35 @@ function updateCommitments() {
         <td style="text-align:right;color:#E65100">₹${deductions.toLocaleString('en-IN')}</td>
         <td style="text-align:right;font-weight:700;color:${remaining ? 'var(--p)' : '#2E7D32'}">₹${remaining.toLocaleString('en-IN')}</td>
         <td><span class="badge ${statusClass}">${statusText}</span></td>
-        <td>${escapeDebtHtml(commitment.assignedTo || commitment.assignedUsername || '—')}</td>
+        <td>${escapeDebtHtml(responsibleText)}</td>
         <td><div style="display:flex;gap:5px;flex-wrap:wrap;min-width:190px">${recordButton}${linkButton}${manageButtons}</div></td>
       </tr>`;
-    });
-    pendingAllocations.forEach(allocation => rows.push(`<tr style="background:#FFFDF5">
+    }).filter(Boolean);
+    pendingAllocations.forEach(allocation => {
+      const responsibleText = responsibleTextForCustomer(customer.customerName);
+      if (!commitmentRowMatchesFilters({
+        customer: customer.customerName,
+        project: allocation.project || '',
+        po: allocation.po || '',
+        statusText: 'Plan Pending',
+        statusKey: 'plan pending',
+        responsibleText
+      })) return;
+      rows.push(`<tr style="background:#FFFDF5">
       <td><strong>${escapeDebtHtml(customer.customerName)}</strong></td>
       <td><b style="color:var(--p)">${escapeDebtHtml(allocation.project || '—')}</b><div style="font-size:9.5px;color:var(--t2)">PO: ${escapeDebtHtml(allocation.po || '—')}</div></td>
       <td style="text-align:right;font-weight:700;color:var(--p)">₹${net.toLocaleString('en-IN')}</td>
       <td style="text-align:right">—</td><td>—</td><td style="text-align:right">—</td><td style="text-align:right">—</td><td style="text-align:right">—</td>
-      <td><span class="badge warning">Plan Pending</span></td><td>—</td>
+      <td><span class="badge warning">Plan Pending</span></td><td>${escapeDebtHtml(responsibleText)}</td>
       <td><div style="display:flex;gap:5px;flex-wrap:wrap">${linkButton}</div></td>
-    </tr>`));
-    if (!rows.length) rows.push(`<tr>
+    </tr>`);
+    });
+    const noLinkedResponsible = responsibleTextForCustomer(customer.customerName);
+    if (!rows.length && !hasDebtTableFilters('commitments')) rows.push(`<tr>
       <td><strong>${escapeDebtHtml(customer.customerName)}</strong></td><td>—</td>
       <td style="text-align:right;font-weight:700;color:var(--p)">₹${net.toLocaleString('en-IN')}</td>
       <td style="text-align:right">—</td><td>—</td><td style="text-align:right">—</td><td style="text-align:right">—</td><td style="text-align:right">—</td>
-      <td><span class="badge pending">Not Linked</span></td><td>—</td><td>${linkButton || '<span style="font-size:10px;color:var(--t2)">View only</span>'}</td>
+      <td><span class="badge pending">Not Linked</span></td><td>${escapeDebtHtml(noLinkedResponsible)}</td><td>${linkButton || '<span style="font-size:10px;color:var(--t2)">View only</span>'}</td>
     </tr>`);
     return rows;
   }).join('');
@@ -2526,6 +2759,75 @@ function checkAdminNotifications() {
   }
 }
 
+function commitmentDeadlineSnoozeKey() {
+  return `debt_commitment_deadline_snooze_${debtUsername() || 'unknown'}`;
+}
+
+function pendingCommitmentDeadlineItems() {
+  const now = new Date();
+  return visibleDebtCustomers().map(customer => {
+    const assignedUsers = customerAssignedUsers(customer.customerName);
+    const assignedToMe = assignedUsers.some(user => user.username === debtUsername());
+    if (!assignedToMe && !canAssignDebtCustomers()) return null;
+
+    const customerAllocations = allocationsData.filter(allocation => allocation.customer === customer.customerName);
+    const pendingAllocations = customerAllocations.filter(allocation => !commitmentsData.some(commitment => commitment.allocationId === allocation.id));
+    const hasAnyCommitment = commitmentsData.some(commitment => commitment.customer === customer.customerName);
+    const needsCommitment = customerAllocations.length ? pendingAllocations.length > 0 : !hasAnyCommitment;
+    if (!needsCommitment) return null;
+
+    const assignedAt = assignmentDate(customer.customerName) || new Date();
+    const dueAt = addDebtDays(assignedAt, COMMITMENT_DEADLINE_DAYS);
+    const daysLeft = debtDaysBetween(now, dueAt);
+    return {
+      customer: customer.customerName,
+      assignedAt,
+      dueAt,
+      daysLeft,
+      overdue: daysLeft < 0,
+      responsible: responsibleTextForCustomer(customer.customerName),
+      pendingCount: customerAllocations.length ? pendingAllocations.length : 1
+    };
+  }).filter(Boolean).sort((a, b) => a.dueAt - b.dueAt);
+}
+
+function shouldShowCommitmentDeadlineReminder(items) {
+  if (!items.length) return false;
+  const snoozedUntil = Number(localStorage.getItem(commitmentDeadlineSnoozeKey()) || 0);
+  if (Date.now() < snoozedUntil) return false;
+  return items.some(item => item.daysLeft <= COMMITMENT_DEADLINE_DAYS);
+}
+
+function showCommitmentDeadlineReminder(items = pendingCommitmentDeadlineItems()) {
+  const list = document.getElementById('commitmentDeadlineList');
+  if (!list) return;
+  list.innerHTML = items.map(item => {
+    const dueText = item.overdue ? `${Math.abs(item.daysLeft)} day(s) overdue` : item.daysLeft === 0 ? 'Due today' : `${item.daysLeft} day(s) left`;
+    return `<div class="deadline-item ${item.overdue ? 'overdue' : ''}">
+      <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">
+        <div>
+          <div style="font-weight:700">${escapeDebtHtml(item.customer)}</div>
+          <div style="font-size:10.5px;color:var(--t2);margin-top:2px">Responsible: ${escapeDebtHtml(item.responsible)}</div>
+        </div>
+        <span class="badge ${item.overdue ? 'error' : 'warning'}">${escapeDebtHtml(dueText)}</span>
+      </div>
+      <div style="font-size:10.5px;color:var(--t2);margin-top:7px">Assigned ${item.assignedAt.toLocaleDateString('en-IN')} · Due ${item.dueAt.toLocaleDateString('en-IN')} · ${item.pendingCount} pending commitment item(s)</div>
+    </div>`;
+  }).join('');
+  document.getElementById('commitmentDeadlineModal').classList.add('active');
+}
+
+function snoozeCommitmentDeadlineReminder() {
+  localStorage.setItem(commitmentDeadlineSnoozeKey(), String(Date.now() + COMMITMENT_DEADLINE_SNOOZE_HOURS * 60 * 60 * 1000));
+  closeModal('commitmentDeadlineModal');
+}
+
+function goToDeadlineCommitments() {
+  closeModal('commitmentDeadlineModal');
+  hideNotificationBadge();
+  switchTab('commitments');
+}
+
 function getThisWeeksMondayAtTen(now = new Date()) {
   const monday = new Date(now);
   const daysSinceMonday = (now.getDay() + 6) % 7;
@@ -2621,6 +2923,19 @@ async function checkNotifications(useCachedInfo = false) {
     return;
   }
 
+  const deadlineItems = pendingCommitmentDeadlineItems();
+  if (deadlineItems.length) {
+    activeNotificationType = 'commitment_deadline';
+    const overdueCount = deadlineItems.filter(item => item.overdue).length;
+    showNotificationBadge(overdueCount ? `${overdueCount} Commitment(s) Overdue` : `${deadlineItems.length} Commitment(s) Due`);
+    const reminderId = `commitment-deadline:${deadlineItems.map(item => `${item.customer}:${item.dueAt.toISOString()}`).join('|')}`;
+    if (shouldShowCommitmentDeadlineReminder(deadlineItems) && autoShownNotificationId !== reminderId) {
+      autoShownNotificationId = reminderId;
+      showCommitmentDeadlineReminder(deadlineItems);
+    }
+    return;
+  }
+
   if (latestUploadInfo && latestUploadDate) {
     const uploadId = latestUploadInfo.uploadId || latestUploadInfo.uploadedAtIso;
     const seenUploadId = localStorage.getItem(uploadNoticeSeenKey());
@@ -2676,6 +2991,8 @@ function openNotificationModal() {
     showCSVUploadReminder();
   } else if (activeNotificationType === 'commitment') {
     showCommitmentReminder();
+  } else if (activeNotificationType === 'commitment_deadline') {
+    showCommitmentDeadlineReminder();
   }
 }
 
@@ -2761,3 +3078,5 @@ document.addEventListener('DOMContentLoaded', function() {
 
 </body>
 </html>
+
+
