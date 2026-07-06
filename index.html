@@ -1,7 +1,3 @@
-
-
-
-
 <!DOCTYPE html>
 <!-- DQAP Debt Management 2026.06.24.5 - Summary-style commitments table -->
 <html lang="en">
@@ -672,6 +668,7 @@
       <div class="table-tools">
         <input class="search" type="text" id="commitmentsSearch" placeholder="Search Commitments..." oninput="setDebtTableFilter('commitments','search',this.value)">
         <button class="btn sm" onclick="resetDebtTableFilters('commitments')"><i class="ti ti-filter-x"></i> Clear Filters</button>
+        <button class="btn sm" id="clearCycleCommitmentsBtn" onclick="clearCurrentCycleCommitments()" style="display:none;color:#c00;border-color:#ffcdd2" title="Removes all current-cycle commitments and allocations so the Link modal starts fresh for every customer. Use this once after deploying the fresh-start fix, or any time you want to force a clean slate without waiting for the next CSV upload."><i class="ti ti-eraser"></i> Clear All Commitments (Fresh Start)</button>
       </div>
       <div style="overflow-x:auto">
         <table class="commitment-table">
@@ -1435,6 +1432,55 @@ async function persistUploadedWeeklyCycle() {
   } catch (error) {
     console.error('Could not save the shared weekly debt cycle:', error);
     return false;
+  }
+}
+
+// On-demand version of the same "fresh start" the upload flow now does
+// automatically on a genuinely new cycle. Needed because that reset only
+// fires the next time a NEW week's CSV is uploaded - it does nothing for
+// commitments that already existed in the CURRENT cycle before this fix
+// shipped. This lets Updesh/Pratim force the same clean slate immediately
+// without waiting for next week's upload. Allocation/commitment documents are
+// deleted outright (not just unlinked) since, unlike a cycle rollover, there
+// is no "next cycle" boundary to leave them archived under - this is an
+// explicit, confirmed, admin-only action.
+async function clearCurrentCycleCommitments() {
+  if (!canManageCommitments()) {
+    showToast('Only updesh and pratim can clear commitments', 'error');
+    return;
+  }
+  if (!currentCycleId) {
+    showToast('No active cycle to clear', 'error');
+    return;
+  }
+  const allocCount = allocationsData.length, commitCount = commitmentsData.length;
+  if (!allocCount && !commitCount) {
+    showToast('Nothing to clear - this cycle already has no commitments', 'success');
+    return;
+  }
+  if (!confirm(`This deletes all ${allocCount} project/PO link(s) and ${commitCount} commitment(s) for the current cycle, for every customer. This cannot be undone from within the app. Continue?`)) return;
+
+  showToast('Clearing commitments...', 'success');
+  try {
+    const allocIds = allocationsData.map(a => a.id);
+    const commitIds = commitmentsData.map(c => c.id);
+    for (let start = 0; start < allocIds.length; start += 400) {
+      const batch = db.batch();
+      allocIds.slice(start, start + 400).forEach(id => batch.delete(db.collection(DEBT_ALLOCATIONS_COLLECTION).doc(id)));
+      await batch.commit();
+    }
+    for (let start = 0; start < commitIds.length; start += 400) {
+      const batch = db.batch();
+      commitIds.slice(start, start + 400).forEach(id => batch.delete(db.collection(DEBT_COMMITMENTS_COLLECTION).doc(id)));
+      await batch.commit();
+    }
+    allocationsData = [];
+    commitmentsData = [];
+    saveToLocalStorage();
+    updateAllTabs();
+    showToast('Commitments cleared - every customer now starts fresh', 'success');
+  } catch (error) {
+    showToast('Could not clear commitments: ' + error.message, 'error');
   }
 }
 
@@ -2829,6 +2875,8 @@ function applyDebtPermissions() {
   document.querySelectorAll('.tab-btn[data-tab]').forEach(button => {
     button.style.display = allowed.has(button.dataset.tab) ? '' : 'none';
   });
+  const clearBtn = document.getElementById('clearCycleCommitmentsBtn');
+  if (clearBtn) clearBtn.style.display = canManageCommitments() ? 'inline-flex' : 'none';
 
   // dev starts on Upload; everyone else starts on the universally visible Summary.
   switchTab(canUploadCSV() ? 'upload' : 'summary');
@@ -3172,5 +3220,3 @@ document.addEventListener('DOMContentLoaded', function() {
 
 </body>
 </html>
-
-
