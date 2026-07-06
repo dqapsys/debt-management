@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <!-- DQAP Debt Management 2026.06.24.5 - Summary-style commitments table -->
 <html lang="en">
@@ -1831,6 +1830,14 @@ function updateLinking() {
   }).join('');
 }
 
+// Credit (Cr) balances are already negative and reflect an over-collection -
+// there is nothing further to "net off", so they pass through unfloored.
+// Ordinary positive balances keep the existing floor-at-zero behaviour.
+function netOutstandingValue(outstanding, settledAmount) {
+  const raw = Number(outstanding || 0);
+  if (raw < 0) return raw;
+  return Math.max(0, raw - Number(settledAmount || 0));
+}
 function updateCommitments() {
   const tbody = document.getElementById('commitmentsTable');
   const customers = visibleDebtCustomers();
@@ -1838,7 +1845,7 @@ function updateCommitments() {
   const panel = document.getElementById('assignedCustomersPanel');
   panel.innerHTML = customers.length ? customers.map(customer => {
     const settlement = customerSettlement(customer.customerName);
-    const net = Math.max(0, Number(customer.outstanding || 0) - settlement.collected - settlement.deductions);
+    const net = netOutstandingValue(customer.outstanding, settlement.collected + settlement.deductions);
     const users = customerAssignedUsers(customer.customerName).map(user => escapeDebtHtml(user.fullName || user.username)).join(', ') || 'Unassigned';
     const customerAllocations = allocationsData.filter(allocation => allocation.customer === customer.customerName && (canSeeAllDebtCustomers() || !commitmentsData.some(item => item.allocationId === allocation.id) || commitmentsData.find(item => item.allocationId === allocation.id)?.assignedUsername === debtUsername()));
     const commitments = commitmentsData.filter(commitment => commitment.customer === customer.customerName && (canSeeAllDebtCustomers() || commitment.assignedUsername === debtUsername()));
@@ -1875,7 +1882,12 @@ function updateCommitments() {
   // Summary-style tabular commitments view. Each Project/PO has its own actionable row.
   const commitmentTableRows = customers.flatMap(customer => {
     const settlement = customerSettlement(customer.customerName);
-    const net = Math.max(0, Number(customer.outstanding || 0) - settlement.collected - settlement.deductions);
+    const net = netOutstandingValue(customer.outstanding, settlement.collected + settlement.deductions);
+    // Fully settled customers (nothing left owed either way) have no further
+    // commitments work to do and are dropped from this page. Cr (negative net)
+    // customers are deliberately kept - see the deadline-counter exclusion
+    // below for where their "not collectible" status is actually handled.
+    if (net === 0) return [];
     const visibleCommitments = commitmentsData.filter(commitment => commitment.customer === customer.customerName && (canSeeAllDebtCustomers() || commitment.assignedUsername === debtUsername()));
     const visibleCustomerAllocations = allocationsData.filter(allocation => allocation.customer === customer.customerName && (canSeeAllDebtCustomers() || !commitmentsData.some(item => item.allocationId === allocation.id) || commitmentsData.find(item => item.allocationId === allocation.id)?.assignedUsername === debtUsername()));
     const pendingAllocations = visibleCustomerAllocations.filter(allocation => !commitmentsData.some(item => item.allocationId === allocation.id));
@@ -1904,7 +1916,7 @@ function updateCommitments() {
       return `<tr>
         <td><strong>${escapeDebtHtml(customer.customerName)}</strong></td>
         <td><b style="color:var(--p)">${escapeDebtHtml(allocation.project || '—')}</b><div style="font-size:9.5px;color:var(--t2)">PO: ${escapeDebtHtml(allocation.po || '—')}</div></td>
-        <td style="text-align:right;font-weight:700;color:var(--p)">₹${net.toLocaleString('en-IN')}</td>
+        <td style="text-align:right;font-weight:700;color:${net < 0 ? '#B71C1C' : 'var(--p)'}">${formatDebtAmount(net)}</td>
         <td style="text-align:right;font-weight:700">₹${amount.toLocaleString('en-IN')}</td>
         <td style="white-space:nowrap">${commitment.commitDate ? new Date(commitment.commitDate).toLocaleDateString('en-IN') : '—'}</td>
         <td style="text-align:right;color:#2E7D32">₹${collected.toLocaleString('en-IN')}</td>
@@ -1928,7 +1940,7 @@ function updateCommitments() {
       rows.push(`<tr style="background:#FFFDF5">
       <td><strong>${escapeDebtHtml(customer.customerName)}</strong></td>
       <td><b style="color:var(--p)">${escapeDebtHtml(allocation.project || '—')}</b><div style="font-size:9.5px;color:var(--t2)">PO: ${escapeDebtHtml(allocation.po || '—')}</div></td>
-      <td style="text-align:right;font-weight:700;color:var(--p)">₹${net.toLocaleString('en-IN')}</td>
+      <td style="text-align:right;font-weight:700;color:${net < 0 ? '#B71C1C' : 'var(--p)'}">${formatDebtAmount(net)}</td>
       <td style="text-align:right">—</td><td>—</td><td style="text-align:right">—</td><td style="text-align:right">—</td><td style="text-align:right">—</td>
       <td><span class="badge warning">Plan Pending</span></td><td>${escapeDebtHtml(responsibleText)}</td>
       <td><div style="display:flex;gap:5px;flex-wrap:wrap">${linkButton}</div></td>
@@ -1937,7 +1949,7 @@ function updateCommitments() {
     const noLinkedResponsible = responsibleTextForCustomer(customer.customerName);
     if (!rows.length && !hasDebtTableFilters('commitments')) rows.push(`<tr>
       <td><strong>${escapeDebtHtml(customer.customerName)}</strong></td><td>—</td>
-      <td style="text-align:right;font-weight:700;color:var(--p)">₹${net.toLocaleString('en-IN')}</td>
+      <td style="text-align:right;font-weight:700;color:${net < 0 ? '#B71C1C' : 'var(--p)'}">${formatDebtAmount(net)}</td>
       <td style="text-align:right">—</td><td>—</td><td style="text-align:right">—</td><td style="text-align:right">—</td><td style="text-align:right">—</td>
       <td><span class="badge pending">Not Linked</span></td><td>${escapeDebtHtml(noLinkedResponsible)}</td><td>${linkButton || '<span style="font-size:10px;color:var(--t2)">View only</span>'}</td>
     </tr>`);
@@ -2807,6 +2819,12 @@ function pendingCommitmentDeadlineItems() {
     const assignedUsers = customerAssignedUsers(customer.customerName);
     const assignedToMe = assignedUsers.some(user => user.username === debtUsername());
     if (!assignedToMe && !canAssignDebtCustomers()) return null;
+
+    // A Cr (credit) balance or an already fully-settled customer has nothing
+    // left to collect, so it shouldn't nag anyone for a commitment plan.
+    const settlement = customerSettlement(customer.customerName);
+    const net = netOutstandingValue(customer.outstanding, settlement.collected + settlement.deductions);
+    if (net <= 0) return null;
 
     const customerAllocations = allocationsData.filter(allocation => allocation.customer === customer.customerName);
     const pendingAllocations = customerAllocations.filter(allocation => !commitmentsData.some(commitment => commitment.allocationId === allocation.id));
