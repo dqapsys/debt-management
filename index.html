@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <!-- DQAP Debt Management 2026.06.24.5 - Summary-style commitments table -->
 <html lang="en">
@@ -1271,20 +1272,45 @@ function startDebtCycleListeners() {
   );
 }
 
-function buildCarriedAllocations(previousAllocations, customers, newCycleId) {
+function buildCarriedAllocations(previousAllocations, previousCommitments, customers, newCycleId) {
   const outstandingByCustomer = new Map(customers.map(customer => [customer.customerName, Number(customer.outstanding || 0)]));
   const usedByCustomer = new Map();
-  const carried = [];
+  const carriedAllocations = [];
+  const carriedCommitments = [];
   previousAllocations.forEach(allocation => {
     const outstanding = outstandingByCustomer.get(allocation.customer) || 0;
     const used = usedByCustomer.get(allocation.customer) || 0;
     const amount = Math.min(Number(allocation.amount || 0), Math.max(0, outstanding - used));
     if (amount <= 0) return;
-    const ref = db.collection(DEBT_ALLOCATIONS_COLLECTION).doc();
-    carried.push({ id: ref.id, ref, data: { cycleId: newCycleId, customer: allocation.customer, project: allocation.project, po: allocation.po, amount, carriedFromCycleId: allocation.cycleId || null, createdAt: new Date(), createdBy: currentUser } });
+    const allocRef = db.collection(DEBT_ALLOCATIONS_COLLECTION).doc();
+    carriedAllocations.push({ id: allocRef.id, ref: allocRef, data: { cycleId: newCycleId, customer: allocation.customer, project: allocation.project, po: allocation.po, amount, carriedFromCycleId: allocation.cycleId || null, carriedFromAllocationId: allocation.id, createdAt: new Date(), createdBy: currentUser } });
     usedByCustomer.set(allocation.customer, used + amount);
+
+    // Carry the matching commitment forward too, but only while it's still a
+    // live promise: not already fully collected, and not past its committed
+    // date. An expired-and-uncollected commitment deliberately does NOT carry
+    // forward - it needs a fresh commitment date, not a silently-repeated one.
+    const oldCommitment = previousCommitments.find(c => c.allocationId === allocation.id);
+    if (oldCommitment) {
+      const oldAmount = Number(oldCommitment.amount ?? allocation.amount ?? 0);
+      const collected = Number(oldCommitment.collected || 0);
+      const deductions = Number(oldCommitment.deductions || 0);
+      const settled = Number(oldCommitment.settled ?? (collected + deductions));
+      const isFullyCollected = oldAmount > 0 && settled >= oldAmount;
+      const today = new Date().toISOString().split('T')[0];
+      const isExpired = !isFullyCollected && !!oldCommitment.commitDate && today > oldCommitment.commitDate;
+      if (!isFullyCollected && !isExpired) {
+        const commitRef = db.collection(DEBT_COMMITMENTS_COLLECTION).doc();
+        carriedCommitments.push({ id: commitRef.id, ref: commitRef, data: {
+          cycleId: newCycleId, allocationId: allocRef.id, customer: allocation.customer,
+          amount, assignedTo: oldCommitment.assignedTo || '', assignedUsername: oldCommitment.assignedUsername || '',
+          commitDate: oldCommitment.commitDate, carriedFromCommitmentId: oldCommitment.id,
+          createdAt: oldCommitment.createdAt || new Date(), updatedAt: new Date(), updatedBy: currentUser
+        } });
+      }
+    }
   });
-  return carried;
+  return { carriedAllocations, carriedCommitments };
 }
 
 async function archiveExistingCollectionLedger(records, previousCycleId, newCycleId) {
@@ -1404,6 +1430,7 @@ async function persistUploadedWeeklyCycle() {
     const previousCycleId = previousMetaDoc.exists ? previousMetaDoc.data().cycleId : currentCycleId;
     const isNewCycle = previousCycleId !== newCycleId;
     const previousAllocations = [...allocationsData];
+    const previousCommitments = [...commitmentsData];
 
     await db.collection(DEBT_CYCLES_COLLECTION).doc(newCycleId).set({
       cycleId: newCycleId,
@@ -1420,14 +1447,19 @@ async function persistUploadedWeeklyCycle() {
     if (isNewCycle) {
       // Preserve older browser-only payment history before resetting the live week.
       await archiveExistingCollectionLedger(collectionsData, previousCycleId, newCycleId);
-      const carried = buildCarriedAllocations(previousAllocations, csvData, newCycleId);
-      for (let start = 0; start < carried.length; start += 400) {
+      const { carriedAllocations, carriedCommitments } = buildCarriedAllocations(previousAllocations, previousCommitments, csvData, newCycleId);
+      for (let start = 0; start < carriedAllocations.length; start += 400) {
         const batch = db.batch();
-        carried.slice(start, start + 400).forEach(item => batch.set(item.ref, item.data));
+        carriedAllocations.slice(start, start + 400).forEach(item => batch.set(item.ref, item.data));
         await batch.commit();
       }
-      allocationsData = carried.map(item => ({ id: item.id, ...item.data }));
-      commitmentsData = [];
+      for (let start = 0; start < carriedCommitments.length; start += 400) {
+        const batch = db.batch();
+        carriedCommitments.slice(start, start + 400).forEach(item => batch.set(item.ref, item.data));
+        await batch.commit();
+      }
+      allocationsData = carriedAllocations.map(item => ({ id: item.id, ...item.data }));
+      commitmentsData = carriedCommitments.map(item => ({ id: item.id, ...item.data }));
       collectionsData = [];
     }
 
@@ -2139,11 +2171,12 @@ async function openLinkModal(customerName) {
       collected: info.collected, deductions: info.deductions, settled: info.settled,
       collectionDate: info.collectionDate, isFullyCollected: info.isFullyCollected, isExpired: info.isExpired };
   });
-  // Expired-and-uncollected commitments no longer occupy committed capacity,
-  // so they're excluded from both "already allocated" totals below.
+  // Fully-collected commitments are already reflected in netOutstanding via
+  // customerSettlement() below, so counting them again here would subtract
+  // the same money twice. Expired-and-uncollected ones free up capacity too.
   const allocated = allocationsData.filter(a => a.customer === customerName).reduce((s, a) => {
     const info = commitmentInfoForAllocation(a);
-    return s + (info.isExpired ? 0 : Number(a.amount || 0));
+    return s + (info.isExpired || info.isFullyCollected ? 0 : Number(a.amount || 0));
   }, 0);
   const settlement = customerSettlement(customerName);
   const netOutstanding = Math.max(0, Number(currentCustomer.outstanding || 0) - settlement.collected - settlement.deductions);
@@ -2294,9 +2327,9 @@ function addAllocation() {
   const netOutstanding = Math.max(0, Number(currentCustomer.outstanding || 0) - settlement.collected - settlement.deductions);
   const otherPlanned = allocationsData.filter(allocation => allocation.customer === currentCustomer.customerName && !currentManagedAllocationIds.includes(allocation.id)).reduce((sum, allocation) => {
     const info = commitmentInfoForAllocation(allocation);
-    return sum + (info.isExpired ? 0 : Number(allocation.amount || 0));
+    return sum + (info.isExpired || info.isFullyCollected ? 0 : Number(allocation.amount || 0));
   }, 0);
-  const alreadyPlanned = tempAllocations.filter(allocation => !allocation.isExpired).reduce((sum, allocation) => sum + Number(allocation.amount || 0), 0);
+  const alreadyPlanned = tempAllocations.filter(allocation => !allocation.isExpired && !allocation.isFullyCollected).reduce((sum, allocation) => sum + Number(allocation.amount || 0), 0);
   if (otherPlanned + alreadyPlanned + amount > netOutstanding) {
     showToast(`Commitments cannot exceed net outstanding of ₹${netOutstanding.toLocaleString('en-IN')}`, 'error');
     return;
