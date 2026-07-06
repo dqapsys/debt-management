@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <!-- DQAP Debt Management 2026.06.24.5 - Summary-style commitments table -->
 <html lang="en">
@@ -2099,6 +2098,26 @@ function updateLeaderboard() {
 }
 
 // Modal Functions
+// Full status for an allocation's matching commitment (if any). Centralised
+// here because both the Link modal and its capacity math need the same
+// "is this actually still occupying committed capacity" answer.
+function commitmentInfoForAllocation(allocation) {
+  const commitment = commitmentsData.find(c => c.allocationId === allocation.id);
+  if (!commitment) return { commitment: null, amount: Number(allocation.amount || 0), collected: 0, deductions: 0, settled: 0, isFullyCollected: false, isExpired: false, commitDate: '', collectionDate: null };
+  const amount = Number(commitment.amount ?? allocation.amount ?? 0);
+  const collected = Number(commitment.collected || 0);
+  const deductions = Number(commitment.deductions || 0);
+  const settled = Number(commitment.settled ?? (collected + deductions));
+  const isFullyCollected = amount > 0 && settled >= amount;
+  const commitDate = commitment.commitDate || '';
+  const today = new Date().toISOString().split('T')[0];
+  // Expired = the committed date has passed and it was never (fully) collected.
+  // Such a commitment no longer occupies "committed" capacity - the money
+  // becomes available for a fresh commitment again - but the record itself is
+  // kept (not deleted) so it remains visible as a missed commitment.
+  const isExpired = !isFullyCollected && !!commitDate && today > commitDate;
+  return { commitment, amount, collected, deductions, settled, isFullyCollected, isExpired, commitDate, collectionDate: commitment.collectionDate || null };
+}
 async function openLinkModal(customerName) {
   currentCustomer = csvData.find(c => c.customerName === customerName);
   if (!currentCustomer) return;
@@ -2114,11 +2133,18 @@ async function openLinkModal(customerName) {
     return commitment ? commitment.assignedUsername === debtUsername() : true;
   });
   currentManagedAllocationIds = managedAllocations.map(allocation => allocation.id);
-  tempAllocations = managedAllocations.map(allocation => ({
-    ...allocation,
-    commitDate: commitmentsData.find(commitment => commitment.allocationId === allocation.id)?.commitDate || ''
-  }));
-  const allocated = allocationsData.filter(a => a.customer === customerName).reduce((s, a) => s + a.amount, 0);
+  tempAllocations = managedAllocations.map(allocation => {
+    const info = commitmentInfoForAllocation(allocation);
+    return { ...allocation, commitDate: info.commitDate, commitmentId: info.commitment?.id || null,
+      collected: info.collected, deductions: info.deductions, settled: info.settled,
+      collectionDate: info.collectionDate, isFullyCollected: info.isFullyCollected, isExpired: info.isExpired };
+  });
+  // Expired-and-uncollected commitments no longer occupy committed capacity,
+  // so they're excluded from both "already allocated" totals below.
+  const allocated = allocationsData.filter(a => a.customer === customerName).reduce((s, a) => {
+    const info = commitmentInfoForAllocation(a);
+    return s + (info.isExpired ? 0 : Number(a.amount || 0));
+  }, 0);
   const settlement = customerSettlement(customerName);
   const netOutstanding = Math.max(0, Number(currentCustomer.outstanding || 0) - settlement.collected - settlement.deductions);
   
@@ -2266,8 +2292,11 @@ function addAllocation() {
   const projectLabel = isOther ? `Other-${otherName}` : proj.name;
   const settlement = customerSettlement(currentCustomer.customerName);
   const netOutstanding = Math.max(0, Number(currentCustomer.outstanding || 0) - settlement.collected - settlement.deductions);
-  const otherPlanned = allocationsData.filter(allocation => allocation.customer === currentCustomer.customerName && !currentManagedAllocationIds.includes(allocation.id)).reduce((sum, allocation) => sum + Number(allocation.amount || 0), 0);
-  const alreadyPlanned = tempAllocations.reduce((sum, allocation) => sum + Number(allocation.amount || 0), 0);
+  const otherPlanned = allocationsData.filter(allocation => allocation.customer === currentCustomer.customerName && !currentManagedAllocationIds.includes(allocation.id)).reduce((sum, allocation) => {
+    const info = commitmentInfoForAllocation(allocation);
+    return sum + (info.isExpired ? 0 : Number(allocation.amount || 0));
+  }, 0);
+  const alreadyPlanned = tempAllocations.filter(allocation => !allocation.isExpired).reduce((sum, allocation) => sum + Number(allocation.amount || 0), 0);
   if (otherPlanned + alreadyPlanned + amount > netOutstanding) {
     showToast(`Commitments cannot exceed net outstanding of ₹${netOutstanding.toLocaleString('en-IN')}`, 'error');
     return;
@@ -2299,17 +2328,34 @@ function updateAllocationsList() {
     return;
   }
   
-  div.innerHTML = tempAllocations.map((a, idx) => `
-    <div style="background: #fff; padding: 10px; margin-bottom: 8px; border-radius: 4px; border-left: 3px solid var(--p); display: flex; justify-content: space-between; align-items: center;">
+  div.innerHTML = tempAllocations.map((a, idx) => {
+    let statusLine, borderColor = 'var(--p)', deleteBtn = `<button class="btn sm" onclick="deleteAllocation(${idx})" style="background: #ffebee; color: #c00; border-color: #ffcdd2; margin-left: 10px;">✕ Delete</button>`;
+    if (a.isFullyCollected) {
+      borderColor = '#1B5E20';
+      const paidOn = a.collectionDate ? new Date(a.collectionDate).toLocaleDateString('en-IN') : (a.commitDate ? new Date(a.commitDate).toLocaleDateString('en-IN') : 'date not recorded');
+      statusLine = `<div style="font-size:11px;color:#1B5E20;font-weight:600">✓ Committed &amp; Collected · Paid ${paidOn}</div>`;
+      // A collected, historical record shouldn't be casually deletable from this list.
+      deleteBtn = canManageCommitments() ? deleteBtn : '';
+    } else if (a.isExpired) {
+      borderColor = '#B71C1C';
+      const wasDue = a.commitDate ? new Date(a.commitDate).toLocaleDateString('en-IN') : 'unknown date';
+      statusLine = `<div style="font-size:11px;color:#B71C1C;font-weight:600">⚠ Expired - was due ${wasDue}, not collected. This amount no longer counts as committed and is available for a fresh commitment.</div>`;
+    } else {
+      const dateText = a.commitDate ? new Date(a.commitDate).toLocaleDateString('en-IN') : 'date not recorded';
+      statusLine = `<div style="font-size:11px;color:var(--t2)">Commitment: ${dateText}</div>`;
+    }
+    return `
+    <div style="background: #fff; padding: 10px; margin-bottom: 8px; border-radius: 4px; border-left: 3px solid ${borderColor}; display: flex; justify-content: space-between; align-items: center;">
       <div style="flex: 1;">
         <div style="font-weight: 500; font-size: 12px;">${a.project}</div>
         <div style="font-size: 11px; color: var(--t2);">PO: ${a.po}</div>
-        <div style="font-size:11px;color:var(--t2)">Commitment: ${a.commitDate ? new Date(a.commitDate).toLocaleDateString('en-IN') : 'Date required'}</div>
+        ${statusLine}
         <div style="font-weight: 600; color: var(--p); margin-top: 4px;">₹${a.amount.toLocaleString('en-IN')}</div>
       </div>
-      <button class="btn sm" onclick="deleteAllocation(${idx})" style="background: #ffebee; color: #c00; border-color: #ffcdd2; margin-left: 10px;">✕ Delete</button>
+      ${deleteBtn}
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
 
 function deleteAllocation(idx) {
