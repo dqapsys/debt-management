@@ -11,7 +11,7 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect fill='%23006994' width='64' height='64' rx='12'/%3E%3Ctext x='32' y='43' font-size='36' text-anchor='middle'%3E%F0%9F%92%B0%3C/text%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=IBM+Plex+Sans:wght@500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
   <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
@@ -159,41 +159,46 @@
       grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
       gap: 15px;
       margin-bottom: 20px;
+      font-family: 'IBM Plex Sans', 'DM Sans', 'Segoe UI', system-ui, sans-serif;
     }
     
     .stat {
-      background: var(--card);
+      background: linear-gradient(135deg, #10233A, #0B1826);
       border-radius: var(--rad);
-      border: 0.5px solid var(--bd);
+      border: 0.5px solid rgba(255,255,255,.08);
       padding: 15px;
       display: flex;
-      gap: 12px;
-      align-items: center;
+      flex-direction: column;
+      gap: 10px;
+      box-shadow: 0 4px 14px rgba(0,0,0,.18);
     }
     
     .stat-icon {
-      width: 40px;
-      height: 40px;
-      background: var(--pl);
+      width: 32px;
+      height: 32px;
+      background: rgba(255,255,255,.09);
       border-radius: 8px;
       display: flex;
       align-items: center;
       justify-content: center;
-      color: var(--p);
-      font-size: 20px;
+      color: #7FD1FF;
+      font-size: 16px;
       flex-shrink: 0;
     }
     
     .stat-value {
       font-size: 20px;
-      font-weight: 600;
-      color: var(--p);
+      font-weight: 500;
+      color: #F2F7FB;
+      text-align: right;
     }
     
     .stat-label {
       font-size: 11px;
-      color: var(--t2);
-      text-transform: uppercase;
+      color: #9FB4C7;
+      font-weight: 500;
+      text-align: center;
+      flex: 1;
     }
     
     table {
@@ -568,32 +573,39 @@
   <div id="summary" class="tab-content">
     <div class="stats">
       <div class="stat">
-        <div class="stat-icon">💰</div>
-        <div>
-          <div class="stat-value" id="statOutstanding">₹0</div>
-          <div class="stat-label">Net Outstanding</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="stat-icon">💰</div>
+          <div class="stat-label">Total outstanding</div>
         </div>
+        <div class="stat-value" id="statOutstanding">₹0</div>
       </div>
       <div class="stat">
-        <div class="stat-icon">🔗</div>
-        <div>
-          <div class="stat-value" id="statAllocated">₹0</div>
-          <div class="stat-label">Allocated</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="stat-icon">📅</div>
+          <div class="stat-label">Total committed</div>
         </div>
+        <div class="stat-value" id="statCommitted">₹0</div>
       </div>
       <div class="stat">
-        <div class="stat-icon">📅</div>
-        <div>
-          <div class="stat-value" id="statCommitted">₹0</div>
-          <div class="stat-label">Committed</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="stat-icon">🗓️</div>
+          <div class="stat-label">Committed - current month</div>
         </div>
+        <div class="stat-value" id="statCommittedMonth">₹0</div>
       </div>
       <div class="stat">
-        <div class="stat-icon">✓</div>
-        <div>
-          <div class="stat-value" id="statCollected">₹0</div>
-          <div class="stat-label">Collected This Cycle</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="stat-icon">✓</div>
+          <div class="stat-label">Collections till date <span id="statCollectedTillDatePct" style="color:#7FD1FF"></span></div>
         </div>
+        <div class="stat-value" id="statCollectedTillDate">₹0</div>
+      </div>
+      <div class="stat">
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="stat-icon" id="statGapIcon">⚖️</div>
+          <div class="stat-label">Gap (committed vs collected)</div>
+        </div>
+        <div class="stat-value" id="statGap">₹0</div>
       </div>
     </div>
     
@@ -1155,6 +1167,7 @@ async function autoLoginFromWiki(session) {
       // Load local fallback first, then replace it with the shared Firestore cycle.
       loadFromLocalStorage();
       await loadDebtUsers();
+      await loadDebtReportingHierarchy();
       await loadDebtStateFromFirestore();
       updateAllTabs();
       loadProjects();
@@ -1587,6 +1600,57 @@ async function loadDebtUsers() {
   return wikiUsers;
 }
 
+let debtReportingManagers = {};
+async function loadDebtReportingHierarchy() {
+  // Reuses the same reporting-manager mapping PayMS already maintains
+  // (Settings tab there) rather than requiring a second config to keep in sync.
+  try {
+    const doc = await db.collection('dqap_payms_settings').doc('hierarchy').get();
+    debtReportingManagers = doc.exists ? (doc.data().reportingManagers || {}) : {};
+  } catch (error) {
+    console.warn('Could not load reporting hierarchy:', error);
+    debtReportingManagers = {};
+  }
+}
+function debtUserKey(u) { return String(u?.username || u?.fullName || u || '').trim().toLowerCase(); }
+function debtDirectReportKeysOf(managerIdentityKeys) {
+  const found = new Set();
+  Object.keys(debtReportingManagers).forEach(subKey => {
+    const mgr = debtReportingManagers[subKey];
+    const mgrKeys = [debtUserKey(mgr?.username), debtUserKey(mgr?.fullName)].filter(Boolean);
+    if (mgrKeys.some(k => managerIdentityKeys.includes(k))) found.add(subKey);
+  });
+  return found;
+}
+function debtAllReportKeysRecursive(rootIdentityKeys) {
+  const visitedSubKeys = new Set();
+  const seenIdentity = new Set(rootIdentityKeys);
+  let frontier = [...rootIdentityKeys];
+  let guard = 0;
+  while (frontier.length && guard < 25) {
+    guard++;
+    const directSubKeys = [...debtDirectReportKeysOf(frontier)].filter(k => !visitedSubKeys.has(k));
+    if (!directSubKeys.length) break;
+    const nextFrontier = [];
+    directSubKeys.forEach(subKey => {
+      visitedSubKeys.add(subKey);
+      const userRec = wikiUsers.find(u => debtUserKey(u) === subKey);
+      const idKeys = userRec ? [debtUserKey(userRec.username), debtUserKey(userRec.fullName)].filter(Boolean) : [subKey];
+      idKeys.forEach(k => { if (!seenIdentity.has(k)) { seenIdentity.add(k); nextFrontier.push(k); } });
+    });
+    frontier = nextFrontier;
+  }
+  return visitedSubKeys;
+}
+function debtVisibleUsernames() {
+  // The current user plus everyone in their full reporting chain (direct
+  // reports, their reports, and so on) - not just direct reports.
+  const me = debtUsername();
+  const myFullName = wikiUsers.find(u => u.username === me)?.fullName || '';
+  const rootKeys = [me, debtUserKey(myFullName)].filter(Boolean);
+  const chain = debtAllReportKeysRecursive(rootKeys);
+  return new Set([me, ...chain]);
+}
 function canAssignDebtCustomers() { return ['pratim','updesh'].includes(debtUsername()); }
 function canSeeAllDebtCustomers() { return ['dev','pratim','updesh'].includes(debtUsername()); }
 function customerAssignment(customerName) { return assignmentsData.find(item => item.customer === customerName) || null; }
@@ -1594,7 +1658,8 @@ function customerAssignedUsers(customerName) { return customerAssignment(custome
 function canPlanDebtCustomer(customerName) { return canAssignDebtCustomers() || customerAssignedUsers(customerName).some(user => user.username === debtUsername()); }
 function visibleDebtCustomers() {
   if (canSeeAllDebtCustomers()) return csvData;
-  return csvData.filter(customer => customerAssignedUsers(customer.customerName).some(user => user.username === debtUsername()));
+  const mine = debtVisibleUsernames();
+  return csvData.filter(customer => customerAssignedUsers(customer.customerName).some(user => mine.has(debtUserKey(user.username))));
 }
 function debtDateFrom(value) {
   if (!value) return null;
@@ -1753,14 +1818,37 @@ function updateSummary() {
     const settlement = customerSettlement(customer.customerName);
     return sum + Math.max(0, Number(customer.outstanding || 0) - settlement.collected - settlement.deductions);
   }, 0);
-  const totalAlloc = allocationsData.filter(item => visibleNames.has(item.customer)).reduce((s, a) => s + Number(a.amount || 0), 0);
   const totalCommit = commitmentsData.filter(item => visibleNames.has(item.customer)).reduce((s, c) => s + Number(c.amount || 0), 0);
-  const totalCollect = collectionsData.filter(record => record.cycleId === currentCycleId && visibleNames.has(record.customer)).reduce((s, record) => s + Number(record.amount || 0), 0);
-  
+
+  // Committed for the current calendar month (commitDate falls within this month)
+  const now = new Date();
+  const monthStartStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+  const nextMonthDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const monthEndStr = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, '0')}-01`;
+  const committedThisMonth = commitmentsData.filter(c => visibleNames.has(c.customer) && c.commitDate && c.commitDate >= monthStartStr && c.commitDate < monthEndStr).reduce((s, c) => s + Number(c.amount || 0), 0);
+
+  // Collections till date - ALL cycles, not just the current one, unlike the
+  // per-customer "settled this cycle" figure used for Net Outstanding above.
+  const collectedTillDate = collectionsData.filter(record => visibleNames.has(record.customer)).reduce((s, record) => s + Number(record.amount || 0), 0);
+  const collectedPct = totalCommit > 0 ? (collectedTillDate / totalCommit) * 100 : 0;
+
+  // Gap = Total Committed - Collections till date.
+  // Positive = shortfall against what was committed (deficit, red).
+  // Zero or negative = collections have met or exceeded commitments (surplus, green).
+  const gap = totalCommit - collectedTillDate;
+
   document.getElementById('statOutstanding').textContent = formatDebtAmount(totalOut);
-  document.getElementById('statAllocated').textContent = formatDebtAmount(totalAlloc);
   document.getElementById('statCommitted').textContent = formatDebtAmount(totalCommit);
-  document.getElementById('statCollected').textContent = formatDebtAmount(totalCollect);
+  document.getElementById('statCommittedMonth').textContent = formatDebtAmount(committedThisMonth);
+  document.getElementById('statCollectedTillDate').textContent = formatDebtAmount(collectedTillDate);
+  document.getElementById('statCollectedTillDatePct').textContent = `(${collectedPct.toFixed(1)}%)`;
+  const gapEl = document.getElementById('statGap');
+  const gapIconEl = document.getElementById('statGapIcon');
+  if (gapEl) {
+    gapEl.textContent = (gap > 0 ? '-' : gap < 0 ? '+' : '') + formatDebtAmount(Math.abs(gap));
+    gapEl.style.color = gap > 0 ? '#FF6B6B' : gap < 0 ? '#4ADE80' : '#F2F7FB';
+  }
+  if (gapIconEl) gapIconEl.textContent = gap > 0 ? '⚠️' : gap < 0 ? '✅' : '⚖️';
   document.getElementById('debtCycleInfo').innerHTML = `<b style="color:var(--p)">Current weekly cycle: ${currentCycleId || 'Local fallback'}</b> · Uploaded Outstanding is treated as the Tally-adjusted source of truth. The CSV Collected column is retained only for reconciliation and is never subtracted again. This cycle’s manual collections start at zero and remain archived in the permanent ledger.`;
   
   const tbody = document.getElementById('summaryTable');
