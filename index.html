@@ -603,7 +603,7 @@
       <div class="stat">
         <div style="display:flex;align-items:center;gap:8px">
           <div class="stat-icon" id="statGapIcon">⚖️</div>
-          <div class="stat-label">Gap (committed vs collected)</div>
+          <div class="stat-label">Gap (monthly committed vs monthly collected)</div>
         </div>
         <div class="stat-value" id="statGap">₹0</div>
       </div>
@@ -828,7 +828,9 @@
 <div id="commitmentModal" class="modal">
   <div class="modal-content">
     <div class="modal-header">Set Collection Commitment</div>
-    
+
+    <div id="commitRevisedDateNotice" style="display:none;background:#FFF3E0;border-left:4px solid #E65100;padding:10px 12px;border-radius:4px;margin-bottom:14px;font-size:11.5px;color:#E65100;font-weight:600">🔄 This commitment was carried forward from an earlier CSV upload because it wasn't fully collected. Please set a revised commitment date below.</div>
+
     <div class="form-group">
       <label>Customer</label>
       <input type="text" id="commitCustomer" readonly>
@@ -931,13 +933,13 @@
   <div class="modal-content" style="max-width: 500px;">
     <div class="modal-header" style="background: linear-gradient(135deg, #FF6B6B, #FF5252); color: #fff; margin: -20px -20px 20px -20px; padding: 20px; border-radius: 10px 10px 0 0;">
       <i class="ti ti-alert-triangle" style="font-size: 20px; margin-right: 10px;"></i>
-      Monday CSV Upload Reminder
+      Monthly CSV Upload Reminder
     </div>
     
     <div style="padding: 20px;">
       <div style="background: #FFF3E0; border-left: 4px solid #FF6B6B; padding: 12px; border-radius: 4px; margin-bottom: 16px;">
         <div style="font-weight: 600; color: #E65100;">⏰ Time to Update Data</div>
-        <div style="font-size: 12px; color: var(--t2); margin-top: 4px;">It's Monday morning! Please upload the latest Tally CSV.</div>
+        <div style="font-size: 12px; color: var(--t2); margin-top: 4px;">It's the 1st of the month! Please upload the latest Tally CSV.</div>
       </div>
       
       <div style="background: #f5f5f5; padding: 12px; border-radius: 4px; margin-bottom: 16px;">
@@ -1210,9 +1212,7 @@ let currentCycleId = null;
 
 function debtCycleIdForDate(value = new Date()) {
   const date = new Date(value);
-  const daysSinceMonday = (date.getDay() + 6) % 7;
-  date.setDate(date.getDate() - daysSinceMonday);
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
 
 function applyCollectionLedgerTotals() {
@@ -1283,26 +1283,6 @@ function startDebtCycleListeners() {
       updateAllTabs();
     }, onError)
   );
-}
-
-async function archiveExistingCollectionLedger(records, previousCycleId, newCycleId) {
-  if (!records.length) return;
-  const archiveCycleId = previousCycleId || `legacy-before-${newCycleId}`;
-  for (let start = 0; start < records.length; start += 400) {
-    const batch = db.batch();
-    records.slice(start, start + 400).forEach((record, index) => {
-      const safeId = String(record.id || `legacy-${start + index}-${Date.now()}`).replace(/\//g, '_');
-      batch.set(db.collection(DEBT_COLLECTIONS_COLLECTION).doc(safeId), {
-        ...record,
-        id: safeId,
-        cycleId: record.cycleId || archiveCycleId,
-        source: record.source || 'legacy-local',
-        migratedAt: firebase.firestore.FieldValue.serverTimestamp(),
-        migratedBy: currentUser
-      }, { merge: true });
-    });
-    await batch.commit();
-  }
 }
 
 // Tab Switching
@@ -1377,7 +1357,7 @@ function parseCSV() {
     }
     
     csvData.sort((a, b) => b.outstanding - a.outstanding);
-    const notificationPublished = await persistUploadedWeeklyCycle();
+    const notificationPublished = await persistUploadedMonthlyCycle();
     updateAllTabs();
     saveToLocalStorage();
     if (!notificationPublished) {
@@ -1388,7 +1368,7 @@ function parseCSV() {
   reader.readAsText(csvFile);
 }
 
-async function persistUploadedWeeklyCycle() {
+async function persistUploadedMonthlyCycle() {
   if (!canUploadCSV()) {
     showToast('Only dev and updesh can upload the Tally CSV', 'error');
     return false;
@@ -1400,11 +1380,10 @@ async function persistUploadedWeeklyCycle() {
     const metaRef = db.collection(DEBT_META_COLLECTION).doc(DEBT_LATEST_CSV_DOC);
     const previousMetaDoc = await metaRef.get();
     const previousCycleId = previousMetaDoc.exists ? previousMetaDoc.data().cycleId : currentCycleId;
-    const isNewCycle = previousCycleId !== newCycleId;
 
     await db.collection(DEBT_CYCLES_COLLECTION).doc(newCycleId).set({
       cycleId: newCycleId,
-      weekStart: newCycleId,
+      monthStart: newCycleId,
       customers: csvData,
       tallyCollectedSnapshotTotal: csvData.reduce((sum, row) => sum + Number(row.collected || 0), 0),
       outstandingTotal: csvData.reduce((sum, row) => sum + Number(row.outstanding || 0), 0),
@@ -1414,22 +1393,13 @@ async function persistUploadedWeeklyCycle() {
       customerCount: csvData.length
     }, { merge: true });
 
-    if (isNewCycle) {
-      // Simplified by design: the newly-uploaded CSV's outstanding figure is
-      // already the source of truth (whatever was collected last cycle is
-      // reflected there, whatever wasn't is still shown as owed). So rather
-      // than try to carry forward or reconstruct old commitments/dates, every
-      // new cycle starts completely fresh - no allocations, no commitments,
-      // no "Customer Commitments" history in the Link modal. The team simply
-      // re-links and re-commits against the current numbers as needed.
-      // Nothing is deleted from Firestore - the previous cycle's allocation
-      // and commitment records remain under their own cycleId for audit
-      // purposes, they just aren't loaded into this new cycle's view.
-      await archiveExistingCollectionLedger(collectionsData, previousCycleId, newCycleId);
-      allocationsData = [];
-      commitmentsData = [];
-      collectionsData = [];
-    }
+    // Every CSV upload clears commitments out of the active view - but a
+    // commitment that hasn't been fully collected yet is carried forward
+    // as-is (same amount, same original commitment date) rather than
+    // silently dropped, and flagged so the team knows the date needs to be
+    // revised. Only fully-collected commitments are cleared out. This runs
+    // on every upload, not just when the calendar month actually rolls over.
+    await rolloverCommitmentsOnUpload(previousCycleId, newCycleId, uploadId);
 
     currentCycleId = newCycleId;
     latestUploadInfo = {
@@ -1443,17 +1413,72 @@ async function persistUploadedWeeklyCycle() {
     startDebtCycleListeners();
     return true;
   } catch (error) {
-    console.error('Could not save the shared weekly debt cycle:', error);
+    console.error('Could not save the shared monthly debt cycle:', error);
     return false;
   }
 }
 
-// On-demand version of the same "fresh start" the upload flow now does
-// automatically on a genuinely new cycle. Needed because that reset only
-// fires the next time a NEW week's CSV is uploaded - it does nothing for
-// commitments that already existed in the CURRENT cycle before this fix
-// shipped. This lets Updesh/Pratim force the same clean slate immediately
-// without waiting for next week's upload. Allocation/commitment documents are
+// Runs on every CSV upload (not only when the cycle id itself changes).
+// - Commitments that are NOT fully collected (no payment, or only partial)
+//   are carried forward into the new cycle at their original amount and
+//   original commitment date, flagged carriedForward/needsRevisedDate so
+//   they're visibly called out until someone revises the date. Any partial
+//   collection already recorded against them stays attached.
+// - Commitments that ARE fully collected are cleared out of the active
+//   cycle. Nothing is deleted from Firestore - they're retagged under an
+//   archive cycle id so they remain there for audit but no longer show as
+//   "current".
+async function rolloverCommitmentsOnUpload(previousCycleId, newCycleId, uploadId) {
+  if (!commitmentsData.length && !allocationsData.length) return;
+
+  const isGenuineRollover = previousCycleId && previousCycleId !== newCycleId;
+  const archiveCycleId = isGenuineRollover ? previousCycleId : `${previousCycleId || newCycleId}-closed-${uploadId}`;
+
+  const retainedCommitments = commitmentsData.filter(c => Number(c.settled || 0) < Number(c.amount || 0));
+  const clearedCommitments = commitmentsData.filter(c => !retainedCommitments.includes(c));
+  const retainedIds = new Set(retainedCommitments.map(c => c.id));
+
+  const retainedAllocationIds = new Set(retainedCommitments.map(c => c.allocationId).filter(Boolean));
+  const retainedAllocations = allocationsData.filter(a => retainedAllocationIds.has(a.id));
+  const clearedAllocations = allocationsData.filter(a => !retainedAllocationIds.has(a.id));
+
+  const retainedCollections = collectionsData.filter(r => retainedIds.has(r.commitmentId));
+  const clearedCollections = collectionsData.filter(r => !retainedIds.has(r.commitmentId));
+
+  async function batchWrite(items, collectionName, buildPatch) {
+    for (let start = 0; start < items.length; start += 400) {
+      const batch = db.batch();
+      items.slice(start, start + 400).forEach(item => batch.set(db.collection(collectionName).doc(item.id), buildPatch(item), { merge: true }));
+      await batch.commit();
+    }
+  }
+
+  // Carry the not-yet-fully-collected ones into the new cycle.
+  await batchWrite(retainedCommitments, DEBT_COMMITMENTS_COLLECTION, () => ({
+    cycleId: newCycleId, carriedForward: true, needsRevisedDate: true, updatedAt: new Date(), updatedBy: currentUser
+  }));
+  await batchWrite(retainedAllocations, DEBT_ALLOCATIONS_COLLECTION, () => ({
+    cycleId: newCycleId, carriedForward: true, needsRevisedDate: true, updatedAt: new Date(), updatedBy: currentUser
+  }));
+  await batchWrite(retainedCollections, DEBT_COLLECTIONS_COLLECTION, () => ({ cycleId: newCycleId }));
+
+  // Clear the fully-collected ones out of the active view (archived, not deleted).
+  await batchWrite(clearedCommitments, DEBT_COMMITMENTS_COLLECTION, () => ({ cycleId: archiveCycleId }));
+  await batchWrite(clearedAllocations, DEBT_ALLOCATIONS_COLLECTION, () => ({ cycleId: archiveCycleId }));
+  await batchWrite(clearedCollections, DEBT_COLLECTIONS_COLLECTION, () => ({ cycleId: archiveCycleId, migratedAt: firebase.firestore.FieldValue.serverTimestamp(), migratedBy: currentUser }));
+
+  // Reflect the same outcome locally; the live listeners will confirm it
+  // once startDebtCycleListeners() reattaches under the new cycle id.
+  commitmentsData = retainedCommitments.map(c => ({ ...c, cycleId: newCycleId, carriedForward: true, needsRevisedDate: true }));
+  allocationsData = retainedAllocations.map(a => ({ ...a, cycleId: newCycleId, carriedForward: true, needsRevisedDate: true }));
+  collectionsData = retainedCollections.map(r => ({ ...r, cycleId: newCycleId }));
+}
+
+// On-demand version of a full "fresh start" - unlike the automatic upload
+// rollover above, this does NOT carry forward uncollected commitments; it
+// wipes everything for the current cycle regardless of collection status.
+// This lets Updesh/Pratim force a completely clean slate immediately without
+// waiting for the next CSV upload. Allocation/commitment documents are
 // deleted outright (not just unlinked) since, unlike a cycle rollover, there
 // is no "next cycle" boundary to leave them archived under - this is an
 // explicit, confirmed, admin-only action.
@@ -1471,7 +1496,7 @@ async function clearCurrentCycleCommitments() {
     showToast('Nothing to clear - this cycle already has no commitments', 'success');
     return;
   }
-  if (!confirm(`This deletes all ${allocCount} project/PO link(s) and ${commitCount} commitment(s) for the current cycle, for every customer. This cannot be undone from within the app. Continue?`)) return;
+  if (!confirm(`This deletes all ${allocCount} project/PO link(s) and ${commitCount} commitment(s) for the current cycle, for every customer - including any not yet collected. This cannot be undone from within the app. Continue?`)) return;
 
   showToast('Clearing commitments...', 'success');
   try {
@@ -1832,10 +1857,13 @@ function updateSummary() {
   const collectedTillDate = collectionsData.filter(record => visibleNames.has(record.customer)).reduce((s, record) => s + Number(record.amount || 0), 0);
   const collectedPct = totalCommit > 0 ? (collectedTillDate / totalCommit) * 100 : 0;
 
-  // Gap = Total Committed - Collections till date.
-  // Positive = shortfall against what was committed (deficit, red).
-  // Zero or negative = collections have met or exceeded commitments (surplus, green).
-  const gap = totalCommit - collectedTillDate;
+  // Collected for the current calendar month (collectionDate falls within this month)
+  const collectedThisMonth = collectionsData.filter(record => visibleNames.has(record.customer) && record.collectionDate && record.collectionDate >= monthStartStr && record.collectionDate < monthEndStr).reduce((s, record) => s + Number(record.amount || 0), 0);
+
+  // Gap = Monthly Committed - Monthly Collected.
+  // Positive = shortfall against what was committed this month (deficit, red).
+  // Zero or negative = this month's collections have met or exceeded this month's commitments (surplus, green).
+  const gap = committedThisMonth - collectedThisMonth;
 
   document.getElementById('statOutstanding').textContent = formatDebtAmount(totalOut);
   document.getElementById('statCommitted').textContent = formatDebtAmount(totalCommit);
@@ -1849,7 +1877,7 @@ function updateSummary() {
     gapEl.style.color = gap > 0 ? '#FF6B6B' : gap < 0 ? '#4ADE80' : '#F2F7FB';
   }
   if (gapIconEl) gapIconEl.textContent = gap > 0 ? '⚠️' : gap < 0 ? '✅' : '⚖️';
-  document.getElementById('debtCycleInfo').innerHTML = `<b style="color:var(--p)">Current weekly cycle: ${currentCycleId || 'Local fallback'}</b> · Uploaded Outstanding is treated as the Tally-adjusted source of truth. The CSV Collected column is retained only for reconciliation and is never subtracted again. This cycle’s manual collections start at zero and remain archived in the permanent ledger.`;
+  document.getElementById('debtCycleInfo').innerHTML = `<b style="color:var(--p)">Current monthly cycle: ${currentCycleId || 'Local fallback'}</b> · Uploaded Outstanding is treated as the Tally-adjusted source of truth. The CSV Collected column is retained only for reconciliation and is never subtracted again. Fully-collected commitments are cleared on every CSV upload; commitments not yet collected are carried forward and flagged for a revised date.`;
   
   const tbody = document.getElementById('summaryTable');
   const summaryRows = customers.map(customer => {
@@ -1981,12 +2009,15 @@ function updateCommitments() {
       const settled = Number(commitment.settled || collected + deductions);
       const remaining = Math.max(0, amount - settled);
       const today = new Date().toISOString().split('T')[0];
-      const status = settled >= amount ? 'Collected' : settled > 0 ? 'Partial' : today > commitment.commitDate ? 'Delayed' : 'Committed';
-      const statusClass = status === 'Delayed' ? 'error' : status === 'Partial' ? 'warning' : 'success';
+      const needsRevisedDate = settled < amount && !!commitment.needsRevisedDate;
+      const status = needsRevisedDate ? 'Revise Date' : settled >= amount ? 'Collected' : settled > 0 ? 'Partial' : today > commitment.commitDate ? 'Delayed' : 'Committed';
+      const statusClass = status === 'Revise Date' || status === 'Delayed' ? 'error' : status === 'Partial' ? 'warning' : 'success';
+      const revisedDateNote = needsRevisedDate ? `<div style="font-size:11px;color:#E65100;font-weight:600;margin-top:6px">🔄 Carried forward from last upload - not yet collected. Please revise the commitment date.</div>` : '';
       const recordButton = remaining > 0 ? `<button class="btn sm primary" onclick="openCollectionModal('${commitment.id}')"><i class="ti ti-cash"></i> Record Collection</button>` : '';
       const manageButtons = canManageCommitments() ? `<button class="btn sm" onclick="openCommitmentModal('${commitment.allocationId}')"><i class="ti ti-edit"></i> Edit</button><button class="btn sm" onclick="deleteCommitment('${commitment.id}')" style="color:#c00;border-color:#ffcdd2"><i class="ti ti-trash"></i></button>` : '';
-      return `<div class="commitment-entry">
+      return `<div class="commitment-entry"${needsRevisedDate ? ' style="border-color:#FFCC80;background:#FFF8E1"' : ''}>
         <div class="commitment-entry-head"><div class="commitment-entry-title">${escapeDebtHtml(allocation.project || 'Project')}<div style="font-weight:500;color:var(--t2);margin-top:2px">PO: ${escapeDebtHtml(allocation.po || '—')}</div></div><span class="badge ${statusClass}">${status}</span></div>
+        ${revisedDateNote}
         <div class="commitment-entry-grid">
           <div><span>Committed</span><b>₹${amount.toLocaleString('en-IN')}</b></div>
           <div><span>Commitment Date</span><b>${commitment.commitDate ? new Date(commitment.commitDate).toLocaleDateString('en-IN') : '—'}</b></div>
@@ -2024,8 +2055,9 @@ function updateCommitments() {
       const settled = Number(commitment.settled || collected + deductions);
       const remaining = Math.max(0, amount - settled);
       const today = new Date().toISOString().split('T')[0];
-      const statusText = settled >= amount ? 'Collected' : settled > 0 ? 'Partial' : today > commitment.commitDate ? 'Delayed' : 'Committed';
-      const statusClass = statusText === 'Delayed' ? 'error' : statusText === 'Partial' ? 'warning' : 'success';
+      const needsRevisedDate = settled < amount && !!commitment.needsRevisedDate;
+      const statusText = needsRevisedDate ? 'Revise Date' : settled >= amount ? 'Collected' : settled > 0 ? 'Partial' : today > commitment.commitDate ? 'Delayed' : 'Committed';
+      const statusClass = statusText === 'Revise Date' || statusText === 'Delayed' ? 'error' : statusText === 'Partial' ? 'warning' : 'success';
       const responsibleText = responsibleTextForCustomer(customer.customerName, commitment);
       if (!commitmentRowMatchesFilters({
         customer: customer.customerName,
@@ -2042,7 +2074,7 @@ function updateCommitments() {
         <td><b style="color:var(--p)">${escapeDebtHtml(allocation.project || '—')}</b><div style="font-size:9.5px;color:var(--t2)">PO: ${escapeDebtHtml(allocation.po || '—')}</div></td>
         <td style="text-align:right;font-weight:700;color:${net < 0 ? '#B71C1C' : 'var(--p)'}">${formatDebtAmount(net)}</td>
         <td style="text-align:right;font-weight:700">₹${amount.toLocaleString('en-IN')}</td>
-        <td style="white-space:nowrap">${commitment.commitDate ? new Date(commitment.commitDate).toLocaleDateString('en-IN') : '—'}</td>
+        <td style="white-space:nowrap${needsRevisedDate ? ';color:#E65100;font-weight:700' : ''}">${commitment.commitDate ? new Date(commitment.commitDate).toLocaleDateString('en-IN') : '—'}${needsRevisedDate ? ' 🔄' : ''}</td>
         <td style="text-align:right;color:#2E7D32">₹${collected.toLocaleString('en-IN')}</td>
         <td style="text-align:right;color:#E65100">₹${deductions.toLocaleString('en-IN')}</td>
         <td style="text-align:right;font-weight:700;color:${remaining ? 'var(--p)' : '#2E7D32'}">₹${remaining.toLocaleString('en-IN')}</td>
@@ -2227,7 +2259,7 @@ function updateLeaderboard() {
 // "is this actually still occupying committed capacity" answer.
 function commitmentInfoForAllocation(allocation) {
   const commitment = commitmentsData.find(c => c.allocationId === allocation.id);
-  if (!commitment) return { commitment: null, amount: Number(allocation.amount || 0), collected: 0, deductions: 0, settled: 0, isFullyCollected: false, isExpired: false, commitDate: '', collectionDate: null };
+  if (!commitment) return { commitment: null, amount: Number(allocation.amount || 0), collected: 0, deductions: 0, settled: 0, isFullyCollected: false, isExpired: false, commitDate: '', collectionDate: null, needsRevisedDate: false };
   const amount = Number(commitment.amount ?? allocation.amount ?? 0);
   const collected = Number(commitment.collected || 0);
   const deductions = Number(commitment.deductions || 0);
@@ -2240,7 +2272,10 @@ function commitmentInfoForAllocation(allocation) {
   // becomes available for a fresh commitment again - but the record itself is
   // kept (not deleted) so it remains visible as a missed commitment.
   const isExpired = !isFullyCollected && !!commitDate && today > commitDate;
-  return { commitment, amount, collected, deductions, settled, isFullyCollected, isExpired, commitDate, collectionDate: commitment.collectionDate || null };
+  // Carried forward from a prior CSV upload because it wasn't fully collected
+  // yet - still needs the team to revise its commitment date.
+  const needsRevisedDate = !isFullyCollected && !!commitment.needsRevisedDate;
+  return { commitment, amount, collected, deductions, settled, isFullyCollected, isExpired, commitDate, collectionDate: commitment.collectionDate || null, needsRevisedDate };
 }
 async function openLinkModal(customerName) {
   currentCustomer = csvData.find(c => c.customerName === customerName);
@@ -2261,7 +2296,8 @@ async function openLinkModal(customerName) {
     const info = commitmentInfoForAllocation(allocation);
     return { ...allocation, commitDate: info.commitDate, commitmentId: info.commitment?.id || null,
       collected: info.collected, deductions: info.deductions, settled: info.settled,
-      collectionDate: info.collectionDate, isFullyCollected: info.isFullyCollected, isExpired: info.isExpired };
+      collectionDate: info.collectionDate, isFullyCollected: info.isFullyCollected, isExpired: info.isExpired,
+      carriedForward: !!allocation.carriedForward, needsRevisedDate: info.needsRevisedDate };
   });
   // Fully-collected commitments are already reflected in netOutstanding via
   // customerSettlement() below, so counting them again here would subtract
@@ -2455,7 +2491,11 @@ function updateAllocationsList() {
   
   div.innerHTML = tempAllocations.map((a, idx) => {
     let statusLine, borderColor = 'var(--p)', deleteBtn = `<button class="btn sm" onclick="deleteAllocation(${idx})" style="background: #ffebee; color: #c00; border-color: #ffcdd2; margin-left: 10px;">✕ Delete</button>`;
-    if (a.isFullyCollected) {
+    if (a.needsRevisedDate) {
+      borderColor = '#E65100';
+      const carriedFrom = a.commitDate ? new Date(a.commitDate).toLocaleDateString('en-IN') : 'an earlier cycle';
+      statusLine = `<div style="font-size:11px;color:#E65100;font-weight:600">🔄 Carried forward from ${carriedFrom} - not yet collected. Please revise the commitment date via Edit on the Commitments tab.</div>`;
+    } else if (a.isFullyCollected) {
       borderColor = '#1B5E20';
       const paidOn = a.collectionDate ? new Date(a.collectionDate).toLocaleDateString('en-IN') : (a.commitDate ? new Date(a.commitDate).toLocaleDateString('en-IN') : 'date not recorded');
       statusLine = `<div style="font-size:11px;color:#1B5E20;font-weight:600">✓ Committed &amp; Collected · Paid ${paidOn}</div>`;
@@ -2624,7 +2664,11 @@ async function openCommitmentModal(allocId) {
   } else {
     document.getElementById('commitDate').value = '';
   }
-  
+
+  const settled = Number(commit?.settled ?? ((commit?.collected || 0) + (commit?.deductions || 0)));
+  const needsRevisedDate = !!commit?.needsRevisedDate && settled < Number(commit?.amount || 0);
+  document.getElementById('commitRevisedDateNotice').style.display = needsRevisedDate ? 'block' : 'none';
+
   document.getElementById('commitmentModal').classList.add('active');
 }
 
@@ -2648,6 +2692,10 @@ async function saveCommitment() {
     return;
   }
   const commitmentId = existingCommitment?.id || db.collection(DEBT_COMMITMENTS_COLLECTION).doc().id;
+  // Revising the date on a commitment that was carried forward (because it
+  // wasn't fully collected in a prior cycle) clears the "needs revised date"
+  // flag - that's the whole point of this edit.
+  const dateRevised = !!existingCommitment?.needsRevisedDate && existingCommitment.commitDate !== date;
   const newCommit = {
     id: commitmentId,
     cycleId: currentCycleId,
@@ -2659,11 +2707,16 @@ async function saveCommitment() {
     commitDate: date,
     createdAt: existingCommitment?.createdAt || new Date(),
     updatedAt: new Date(),
-    updatedBy: currentUser
+    updatedBy: currentUser,
+    ...(dateRevised ? { carriedForward: false, needsRevisedDate: false } : {})
   };
 
   try {
     await db.collection(DEBT_COMMITMENTS_COLLECTION).doc(commitmentId).set(newCommit, { merge: true });
+    if (dateRevised && alloc) {
+      await db.collection(DEBT_ALLOCATIONS_COLLECTION).doc(alloc.id).set({ carriedForward: false, needsRevisedDate: false, commitDate: date, updatedAt: new Date(), updatedBy: currentUser }, { merge: true });
+      allocationsData = allocationsData.map(a => a.id === alloc.id ? { ...a, carriedForward: false, needsRevisedDate: false, commitDate: date } : a);
+    }
     commitmentsData = commitmentsData.filter(c => c.allocationId !== currentAllocationId);
     commitmentsData.push({ ...existingCommitment, ...newCommit });
     applyCollectionLedgerTotals();
@@ -3058,12 +3111,8 @@ function goToDeadlineCommitments() {
   switchTab('commitments');
 }
 
-function getThisWeeksMondayAtTen(now = new Date()) {
-  const monday = new Date(now);
-  const daysSinceMonday = (now.getDay() + 6) % 7;
-  monday.setDate(now.getDate() - daysSinceMonday);
-  monday.setHours(10, 0, 0, 0);
-  return monday;
+function getThisMonthsFirstAtTen(now = new Date()) {
+  return new Date(now.getFullYear(), now.getMonth(), 1, 10, 0, 0, 0);
 }
 
 function getLatestUploadDate() {
@@ -3138,14 +3187,14 @@ async function checkNotifications(useCachedInfo = false) {
   }
 
   const now = new Date();
-  const mondayAtTen = getThisWeeksMondayAtTen(now);
+  const monthFirstAtTen = getThisMonthsFirstAtTen(now);
   const latestUploadDate = getLatestUploadDate();
   const isDev = String(currentUser).toLowerCase() === 'dev';
 
-  if (isDev && now >= mondayAtTen && (!latestUploadDate || latestUploadDate < mondayAtTen)) {
+  if (isDev && now >= monthFirstAtTen && (!latestUploadDate || latestUploadDate < monthFirstAtTen)) {
     activeNotificationType = 'upload';
     showNotificationBadge('Upload Tally CSV Now');
-    const reminderId = `upload:${mondayAtTen.toISOString()}`;
+    const reminderId = `upload:${monthFirstAtTen.toISOString()}`;
     if (autoShownNotificationId !== reminderId) {
       autoShownNotificationId = reminderId;
       showCSVUploadReminder();
