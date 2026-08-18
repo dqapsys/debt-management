@@ -919,6 +919,45 @@
 <!-- ══ LOGIN SCREEN (Shows when not authenticated) ══ -->
 <!-- Login removed - using Wiki auto-login only -->
 
+<!-- ══ REVISE COMMITMENT MODAL (any responsible user, reason required) ══ -->
+<div id="reviseCommitmentModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <div class="modal-title">Revise Collection Commitment</div>
+      <button class="modal-close" onclick="closeModal('reviseCommitmentModal')">✕</button>
+    </div>
+    <div style="padding: 15px; border-bottom: 1px solid var(--b); background: var(--pl); margin-bottom: 15px;">
+      <div style="font-size: 10px; color: var(--t2); margin-bottom: 4px;">CUSTOMER</div>
+      <div style="font-size: 16px; font-weight: 600;" id="reviseCustomer">—</div>
+      <div style="font-size: 10px; color: var(--t2); margin-top: 8px; margin-bottom: 4px;">PROJECT / PO</div>
+      <div style="font-size: 13px; font-weight: 500;" id="reviseProjectPo">—</div>
+      <div style="font-size: 10px; color: var(--t2); margin-top: 8px; margin-bottom: 4px;">COMMITTED AMOUNT</div>
+      <div style="font-size: 14px; font-weight: 600; color: var(--p);">₹<span id="reviseAmount">0</span></div>
+      <div style="font-size: 10px; color: var(--t2); margin-top: 8px; margin-bottom: 4px;">ORIGINAL COMMITMENT DATE</div>
+      <div style="font-size: 13px; font-weight: 600; color: #B71C1C;" id="reviseOriginalDate">—</div>
+    </div>
+
+    <div class="form-group">
+      <label>Revised Commitment Date *</label>
+      <input type="date" id="reviseNewDate" required>
+    </div>
+
+    <div class="form-group">
+      <label>Reason for Revision *</label>
+      <textarea id="reviseReason" rows="3" placeholder="Why couldn't the payment be collected on time, and why is the new date realistic? (required)" style="width:100%;padding:8px;border-radius:7px;border:0.5px solid var(--bds);font-family:inherit;font-size:12px;resize:vertical"></textarea>
+    </div>
+
+    <div id="reviseHistoryBlock" style="display:none;margin-bottom:15px">
+      <div style="font-size: 11px; font-weight: 600; color: var(--t2); text-transform: uppercase; margin-bottom: 8px;">Previous Revisions</div>
+      <div id="reviseHistoryList" style="font-size:11px;color:var(--t2);max-height:120px;overflow-y:auto"></div>
+    </div>
+
+    <div style="display: flex; gap: 8px;">
+      <button class="btn" onclick="closeModal('reviseCommitmentModal')" style="flex: 1;">Cancel</button>
+      <button class="btn primary" onclick="saveCommitmentRevision()" style="flex: 1;">✓ Submit Revision</button>
+    </div>
+  </div>
+</div>
 <!-- ══ NOTIFICATION BADGE ══ -->
 <div id="notificationBadge" style="display: none; position: fixed; top: 20px; right: 20px; z-index: 999;">
   <div style="background: #FF5252; color: #fff; padding: 12px 16px; border-radius: 8px; box-shadow: 0 4px 12px rgba(255,82,82,0.3); cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 8px;" onclick="openNotificationModal()">
@@ -1024,6 +1063,29 @@
       <button class="btn" onclick="snoozeCommitmentDeadlineReminder()" style="flex:1">Later</button>
       <button class="btn primary" onclick="goToDeadlineCommitments()" style="flex:1">
         <i class="ti ti-arrow-right"></i> File Commitments
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Commitment Revision Notice (Updesh & Pratim only) -->
+<div id="commitmentRevisionModal" class="modal">
+  <div class="modal-content" style="max-width: 560px;">
+    <div class="modal-header" style="background: linear-gradient(135deg, #E65100, #BF360C); color: #fff; margin: -20px -20px 20px -20px; padding: 20px; border-radius: 10px 10px 0 0;">
+      <i class="ti ti-calendar-time" style="font-size: 20px; margin-right: 10px;"></i>
+      Commitment Date Revision(s)
+    </div>
+
+    <div style="font-size:13px;line-height:1.55;color:var(--t1);margin-bottom:12px">
+      These collection commitments were revised, with a reason, since you last checked.
+    </div>
+
+    <div id="commitmentRevisionList" class="deadline-list"></div>
+
+    <div style="display:flex;gap:8px">
+      <button class="btn" onclick="dismissCommitmentRevisionReminder()" style="flex:1">Dismiss</button>
+      <button class="btn primary" onclick="goToRevisionCommitments()" style="flex:1">
+        <i class="ti ti-arrow-right"></i> View Commitments
       </button>
     </div>
   </div>
@@ -1207,6 +1269,7 @@ let tempAllocations = [];
 let currentManagedAllocationIds = [];
 let currentAllocationId = null;
 let currentCommitmentId = null;
+let currentRevisingCommitmentId = null;
 let csvFile = null;
 let currentCycleId = null;
 
@@ -1273,6 +1336,7 @@ function startDebtCycleListeners() {
     db.collection(DEBT_COMMITMENTS_COLLECTION).where('cycleId', '==', currentCycleId).onSnapshot(snapshot => {
       commitmentsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       applyCollectionLedgerTotals(); updateAllTabs(); saveToLocalStorage();
+      checkNotifications(true);
     }, onError),
     db.collection(DEBT_COLLECTIONS_COLLECTION).where('cycleId', '==', currentCycleId).onSnapshot(snapshot => {
       collectionsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -2014,6 +2078,7 @@ function updateCommitments() {
       const statusClass = status === 'Revise Date' || status === 'Delayed' ? 'error' : status === 'Partial' ? 'warning' : 'success';
       const revisedDateNote = needsRevisedDate ? `<div style="font-size:11px;color:#E65100;font-weight:600;margin-top:6px">🔄 Carried forward from last upload - not yet collected. Please revise the commitment date.</div>` : '';
       const recordButton = remaining > 0 ? `<button class="btn sm primary" onclick="openCollectionModal('${commitment.id}')"><i class="ti ti-cash"></i> Record Collection</button>` : '';
+      const reviseButton = remaining > 0 && canReviseCommitment(commitment) ? `<button class="btn sm" onclick="openReviseCommitmentModal('${commitment.id}')" style="color:#E65100;border-color:#FFCC80"><i class="ti ti-calendar-time"></i> Revise & Justify</button>` : '';
       const manageButtons = canManageCommitments() ? `<button class="btn sm" onclick="openCommitmentModal('${commitment.allocationId}')"><i class="ti ti-edit"></i> Edit</button><button class="btn sm" onclick="deleteCommitment('${commitment.id}')" style="color:#c00;border-color:#ffcdd2"><i class="ti ti-trash"></i></button>` : '';
       return `<div class="commitment-entry"${needsRevisedDate ? ' style="border-color:#FFCC80;background:#FFF8E1"' : ''}>
         <div class="commitment-entry-head"><div class="commitment-entry-title">${escapeDebtHtml(allocation.project || 'Project')}<div style="font-weight:500;color:var(--t2);margin-top:2px">PO: ${escapeDebtHtml(allocation.po || '—')}</div></div><span class="badge ${statusClass}">${status}</span></div>
@@ -2026,7 +2091,7 @@ function updateCommitments() {
           <div><span>Remaining</span><b style="color:${remaining ? 'var(--p)' : '#1B5E20'}">₹${remaining.toLocaleString('en-IN')}</b></div>
           <div><span>Responsible</span><b>${escapeDebtHtml(commitment.assignedTo || commitment.assignedUsername || '—')}</b></div>
         </div>
-        <div class="commitment-card-actions">${recordButton}${manageButtons}</div>
+        <div class="commitment-card-actions">${recordButton}${reviseButton}${manageButtons}</div>
       </div>`;
     }).join('');
     const pendingEntries = customerAllocations.filter(allocation => !commitmentsData.some(item => item.allocationId === allocation.id)).map(allocation => `<div class="commitment-entry" style="border-color:#FFE0B2;background:#FFF8E1"><div class="commitment-entry-head"><div class="commitment-entry-title">${escapeDebtHtml(allocation.project || 'Project')}<div style="font-weight:500;color:var(--t2);margin-top:2px">PO: ${escapeDebtHtml(allocation.po || '—')}</div></div><span class="badge warning">Plan Pending</span></div>${canPlanDebtCustomer(customer.customerName)?`<div class="commitment-card-actions"><button class="btn sm primary" data-customer="${escapeDebtHtml(customer.customerName)}" onclick="openLinkModal(this.dataset.customer)"><i class="ti ti-calendar-dollar"></i> Complete Commitment</button></div>`:''}</div>`).join('');
@@ -2068,6 +2133,7 @@ function updateCommitments() {
         responsibleText
       })) return '';
       const recordButton = remaining > 0 ? `<button class="btn sm primary" onclick="openCollectionModal('${commitment.id}')"><i class="ti ti-cash"></i> Record</button>` : '';
+      const reviseButton = remaining > 0 && canReviseCommitment(commitment) ? `<button class="btn sm" onclick="openReviseCommitmentModal('${commitment.id}')" style="color:#E65100;border-color:#FFCC80"><i class="ti ti-calendar-time"></i> Revise</button>` : '';
       const manageButtons = canManageCommitments() ? `<button class="btn sm" onclick="openCommitmentModal('${commitment.allocationId}')"><i class="ti ti-edit"></i></button><button class="btn sm" onclick="deleteCommitment('${commitment.id}')" style="color:#c00;border-color:#ffcdd2"><i class="ti ti-trash"></i></button>` : '';
       return `<tr>
         <td><strong>${escapeDebtHtml(customer.customerName)}</strong></td>
@@ -2080,7 +2146,7 @@ function updateCommitments() {
         <td style="text-align:right;font-weight:700;color:${remaining ? 'var(--p)' : '#2E7D32'}">₹${remaining.toLocaleString('en-IN')}</td>
         <td><span class="badge ${statusClass}">${statusText}</span></td>
         <td>${escapeDebtHtml(responsibleText)}</td>
-        <td><div style="display:flex;gap:5px;flex-wrap:wrap;min-width:190px">${recordButton}${linkButton}${manageButtons}</div></td>
+        <td><div style="display:flex;gap:5px;flex-wrap:wrap;min-width:190px">${recordButton}${reviseButton}${linkButton}${manageButtons}</div></td>
       </tr>`;
     }).filter(Boolean);
     pendingAllocations.forEach(allocation => {
@@ -2301,10 +2367,12 @@ async function openLinkModal(customerName) {
   });
   // Fully-collected commitments are already reflected in netOutstanding via
   // customerSettlement() below, so counting them again here would subtract
-  // the same money twice. Expired-and-uncollected ones free up capacity too.
+  // the same money twice. Overdue-and-uncollected ones still count as
+  // committed - they no longer silently free up capacity; they must be
+  // revised (with a reason) via openReviseCommitmentModal instead.
   const allocated = allocationsData.filter(a => a.customer === customerName).reduce((s, a) => {
     const info = commitmentInfoForAllocation(a);
-    return s + (info.isExpired || info.isFullyCollected ? 0 : Number(a.amount || 0));
+    return s + (info.isFullyCollected ? 0 : Number(a.amount || 0));
   }, 0);
   const settlement = customerSettlement(customerName);
   const netOutstanding = Math.max(0, Number(currentCustomer.outstanding || 0) - settlement.collected - settlement.deductions);
@@ -2455,9 +2523,9 @@ function addAllocation() {
   const netOutstanding = Math.max(0, Number(currentCustomer.outstanding || 0) - settlement.collected - settlement.deductions);
   const otherPlanned = allocationsData.filter(allocation => allocation.customer === currentCustomer.customerName && !currentManagedAllocationIds.includes(allocation.id)).reduce((sum, allocation) => {
     const info = commitmentInfoForAllocation(allocation);
-    return sum + (info.isExpired || info.isFullyCollected ? 0 : Number(allocation.amount || 0));
+    return sum + (info.isFullyCollected ? 0 : Number(allocation.amount || 0));
   }, 0);
-  const alreadyPlanned = tempAllocations.filter(allocation => !allocation.isExpired && !allocation.isFullyCollected).reduce((sum, allocation) => sum + Number(allocation.amount || 0), 0);
+  const alreadyPlanned = tempAllocations.filter(allocation => !allocation.isFullyCollected).reduce((sum, allocation) => sum + Number(allocation.amount || 0), 0);
   if (otherPlanned + alreadyPlanned + amount > netOutstanding) {
     showToast(`Commitments cannot exceed net outstanding of ₹${netOutstanding.toLocaleString('en-IN')}`, 'error');
     return;
@@ -2491,10 +2559,12 @@ function updateAllocationsList() {
   
   div.innerHTML = tempAllocations.map((a, idx) => {
     let statusLine, borderColor = 'var(--p)', deleteBtn = `<button class="btn sm" onclick="deleteAllocation(${idx})" style="background: #ffebee; color: #c00; border-color: #ffcdd2; margin-left: 10px;">✕ Delete</button>`;
+    let reviseBtn = '';
     if (a.needsRevisedDate) {
       borderColor = '#E65100';
       const carriedFrom = a.commitDate ? new Date(a.commitDate).toLocaleDateString('en-IN') : 'an earlier cycle';
-      statusLine = `<div style="font-size:11px;color:#E65100;font-weight:600">🔄 Carried forward from ${carriedFrom} - not yet collected. Please revise the commitment date via Edit on the Commitments tab.</div>`;
+      statusLine = `<div style="font-size:11px;color:#E65100;font-weight:600">🔄 Carried forward from ${carriedFrom} - not yet collected. Please revise the commitment date.</div>`;
+      if (a.commitmentId) reviseBtn = `<button class="btn sm" onclick="openReviseCommitmentModal('${a.commitmentId}')" style="color:#E65100;border-color:#FFCC80;margin-left:10px"><i class="ti ti-calendar-time"></i> Revise</button>`;
     } else if (a.isFullyCollected) {
       borderColor = '#1B5E20';
       const paidOn = a.collectionDate ? new Date(a.collectionDate).toLocaleDateString('en-IN') : (a.commitDate ? new Date(a.commitDate).toLocaleDateString('en-IN') : 'date not recorded');
@@ -2504,7 +2574,8 @@ function updateAllocationsList() {
     } else if (a.isExpired) {
       borderColor = '#B71C1C';
       const wasDue = a.commitDate ? new Date(a.commitDate).toLocaleDateString('en-IN') : 'unknown date';
-      statusLine = `<div style="font-size:11px;color:#B71C1C;font-weight:600">⚠ Expired - was due ${wasDue}, not collected. This amount no longer counts as committed and is available for a fresh commitment.</div>`;
+      statusLine = `<div style="font-size:11px;color:#B71C1C;font-weight:600">⚠ Overdue - was due ${wasDue}, not collected. This still counts as committed - please revise the date with a reason.</div>`;
+      if (a.commitmentId) reviseBtn = `<button class="btn sm" onclick="openReviseCommitmentModal('${a.commitmentId}')" style="color:#B71C1C;border-color:#ffcdd2;margin-left:10px"><i class="ti ti-calendar-time"></i> Revise</button>`;
     } else {
       const dateText = a.commitDate ? new Date(a.commitDate).toLocaleDateString('en-IN') : 'date not recorded';
       statusLine = `<div style="font-size:11px;color:var(--t2)">Commitment: ${dateText}</div>`;
@@ -2517,7 +2588,7 @@ function updateAllocationsList() {
         ${statusLine}
         <div style="font-weight: 600; color: var(--p); margin-top: 4px;">₹${a.amount.toLocaleString('en-IN')}</div>
       </div>
-      ${deleteBtn}
+      ${reviseBtn}${deleteBtn}
     </div>
   `;
   }).join('');
@@ -2736,6 +2807,113 @@ async function saveCommitment() {
   closeModal('commitmentModal');
   updateAllTabs();
   showToast('✅ Commitment saved', 'success');
+}
+
+// Self-service revision: any user responsible for a commitment (or
+// updesh/pratim) can push the date out when they can't collect on time -
+// but only with a reason on record. This replaces the old silent
+// "Expired ... available for a fresh commitment" behaviour: an overdue,
+// uncollected commitment now stays reserved and simply waits here for a
+// justified revision, instead of quietly freeing up.
+function openReviseCommitmentModal(commitmentId) {
+  const commit = commitmentsData.find(c => c.id === commitmentId);
+  if (!commit) return;
+  if (!canReviseCommitment(commit)) {
+    showToast('Only the person this commitment is assigned to (or updesh/pratim) can revise it', 'error');
+    return;
+  }
+  const settled = Number(commit.settled ?? ((commit.collected || 0) + (commit.deductions || 0)));
+  if (settled >= Number(commit.amount || 0)) {
+    showToast('This commitment is already fully collected', 'error');
+    return;
+  }
+  const allocation = allocationsData.find(a => a.id === commit.allocationId);
+
+  currentRevisingCommitmentId = commitmentId;
+  document.getElementById('reviseCustomer').textContent = commit.customer;
+  document.getElementById('reviseProjectPo').textContent = `${allocation?.project || 'Project'} · PO: ${allocation?.po || '—'}`;
+  document.getElementById('reviseAmount').textContent = Number(commit.amount || 0).toLocaleString('en-IN');
+  document.getElementById('reviseOriginalDate').textContent = commit.commitDate ? new Date(commit.commitDate).toLocaleDateString('en-IN') : '—';
+  document.getElementById('reviseNewDate').value = '';
+  document.getElementById('reviseReason').value = '';
+
+  const history = Array.isArray(commit.revisions) ? commit.revisions : [];
+  const historyBlock = document.getElementById('reviseHistoryBlock');
+  const historyList = document.getElementById('reviseHistoryList');
+  if (history.length) {
+    historyBlock.style.display = 'block';
+    historyList.innerHTML = history.slice().reverse().map(rev => `
+      <div style="padding:8px;margin-bottom:6px;background:#f8fafc;border-radius:6px;border-left:2px solid var(--bds)">
+        <div><b>${rev.fromDate ? new Date(rev.fromDate).toLocaleDateString('en-IN') : '—'} → ${rev.toDate ? new Date(rev.toDate).toLocaleDateString('en-IN') : '—'}</b> by ${escapeDebtHtml(rev.revisedByName || rev.revisedBy || 'Unknown')}</div>
+        <div style="margin-top:2px">${escapeDebtHtml(rev.reason || '')}</div>
+      </div>`).join('');
+  } else {
+    historyBlock.style.display = 'none';
+    historyList.innerHTML = '';
+  }
+
+  document.getElementById('reviseCommitmentModal').classList.add('active');
+}
+
+async function saveCommitmentRevision() {
+  const commit = commitmentsData.find(c => c.id === currentRevisingCommitmentId);
+  if (!commit) return;
+  if (!canReviseCommitment(commit)) {
+    showToast('Only the person this commitment is assigned to (or updesh/pratim) can revise it', 'error');
+    return;
+  }
+
+  const newDate = document.getElementById('reviseNewDate').value;
+  const reason = document.getElementById('reviseReason').value.trim();
+
+  if (!newDate) {
+    showToast('Please select a revised commitment date', 'error');
+    return;
+  }
+  if (!reason) {
+    showToast('Please justify the revision with a reason', 'error');
+    return;
+  }
+
+  const revisionEntry = {
+    fromDate: commit.commitDate || null,
+    toDate: newDate,
+    reason,
+    revisedBy: currentUser,
+    revisedByName: currentUserData?.fullName || currentUserData?.displayName || currentUser,
+    revisedAt: new Date().toISOString()
+  };
+  const revisions = [...(Array.isArray(commit.revisions) ? commit.revisions : []), revisionEntry];
+
+  const patch = {
+    commitDate: newDate,
+    revisions,
+    carriedForward: false,
+    needsRevisedDate: false,
+    updatedAt: new Date(),
+    updatedBy: currentUser
+  };
+
+  try {
+    await db.collection(DEBT_COMMITMENTS_COLLECTION).doc(commit.id).set(patch, { merge: true });
+    if (commit.allocationId) {
+      await db.collection(DEBT_ALLOCATIONS_COLLECTION).doc(commit.allocationId).set({
+        commitDate: newDate, carriedForward: false, needsRevisedDate: false, updatedAt: new Date(), updatedBy: currentUser
+      }, { merge: true });
+      allocationsData = allocationsData.map(a => a.id === commit.allocationId ? { ...a, commitDate: newDate, carriedForward: false, needsRevisedDate: false } : a);
+    }
+    commitmentsData = commitmentsData.map(c => c.id === commit.id ? { ...c, ...patch } : c);
+    applyCollectionLedgerTotals();
+  } catch (error) {
+    showToast('Could not save the revision: ' + error.message, 'error');
+    return;
+  }
+
+  saveToLocalStorage();
+  closeModal('reviseCommitmentModal');
+  currentRevisingCommitmentId = null;
+  updateAllTabs();
+  showToast('✅ Commitment revised', 'success');
 }
 
 function openCollectionModal(commitmentId) {
@@ -3001,6 +3179,15 @@ function canManageCommitments() {
   return ['updesh', 'pratim'].includes(debtUsername());
 }
 
+// Revising a commitment's date (with a mandatory reason) is a lighter-weight
+// action than the full admin "Edit" - it's available to whoever the
+// commitment is actually assigned to, not just updesh/pratim, since it's
+// the responsible person themselves who best knows why a payment slipped.
+function canReviseCommitment(commitment) {
+  if (!commitment) return false;
+  return canManageCommitments() || commitment.assignedUsername === debtUsername();
+}
+
 function canEditAllCommitments() {
   return canManageCommitments();
 }
@@ -3038,6 +3225,61 @@ function checkAdminNotifications() {
 
 function commitmentDeadlineSnoozeKey() {
   return `debt_commitment_deadline_snooze_${debtUsername() || 'unknown'}`;
+}
+
+// Flattens every commitment's revision history (added by the "Revise &
+// Justify" workflow) into a single, most-recent-first list, with the
+// linked project/PO for context.
+function allCommitmentRevisions() {
+  const entries = [];
+  commitmentsData.forEach(commitment => {
+    (Array.isArray(commitment.revisions) ? commitment.revisions : []).forEach((rev, idx) => {
+      const allocation = allocationsData.find(a => a.id === commitment.allocationId);
+      entries.push({
+        id: `${commitment.id}:${rev.revisedAt || idx}`,
+        commitmentId: commitment.id,
+        customer: commitment.customer,
+        project: allocation?.project || 'Project',
+        po: allocation?.po || '—',
+        amount: Number(commitment.amount || 0),
+        fromDate: rev.fromDate || null,
+        toDate: rev.toDate || null,
+        reason: rev.reason || '',
+        revisedBy: rev.revisedBy || '',
+        revisedByName: rev.revisedByName || rev.revisedBy || 'Unknown',
+        revisedAt: rev.revisedAt || null
+      });
+    });
+  });
+  return entries.sort((a, b) => new Date(b.revisedAt || 0) - new Date(a.revisedAt || 0));
+}
+
+function revisionNoticeSeenKey() {
+  return `debt_revision_notice_seen_${debtUsername() || 'unknown'}`;
+}
+
+function getSeenRevisionIds() {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(revisionNoticeSeenKey()) || '[]'));
+  } catch (error) {
+    return new Set();
+  }
+}
+
+function markRevisionIdsSeen(ids) {
+  if (!ids || !ids.length) return;
+  const seen = getSeenRevisionIds();
+  ids.forEach(id => seen.add(id));
+  // Cap what we persist so this doesn't grow unbounded over years of use.
+  localStorage.setItem(revisionNoticeSeenKey(), JSON.stringify(Array.from(seen).slice(-300)));
+}
+
+// Revision alerts are for updesh/pratim only, and only for revisions made
+// by someone else - no point alerting a person about their own edit.
+function pendingCommitmentRevisionItems() {
+  if (!canManageCommitments()) return [];
+  const seen = getSeenRevisionIds();
+  return allCommitmentRevisions().filter(entry => !seen.has(entry.id) && entry.revisedBy !== debtUsername());
 }
 
 function pendingCommitmentDeadlineItems() {
@@ -3107,6 +3349,45 @@ function snoozeCommitmentDeadlineReminder() {
 
 function goToDeadlineCommitments() {
   closeModal('commitmentDeadlineModal');
+  hideNotificationBadge();
+  switchTab('commitments');
+}
+
+// Revision alert (updesh/pratim only): shown on login (and live, if a
+// revision comes in while they're already on the page) so they don't have
+// to stumble onto a changed date on their own.
+function showCommitmentRevisionReminder(items = pendingCommitmentRevisionItems()) {
+  const list = document.getElementById('commitmentRevisionList');
+  if (!list) return;
+  list.innerHTML = items.map(item => {
+    const fromText = item.fromDate ? new Date(item.fromDate).toLocaleDateString('en-IN') : '—';
+    const toText = item.toDate ? new Date(item.toDate).toLocaleDateString('en-IN') : '—';
+    const whenText = item.revisedAt ? new Date(item.revisedAt).toLocaleString('en-IN') : '';
+    return `<div class="deadline-item">
+      <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">
+        <div>
+          <div style="font-weight:700">${escapeDebtHtml(item.customer)}</div>
+          <div style="font-size:10.5px;color:var(--t2);margin-top:2px">${escapeDebtHtml(item.project)} · PO: ${escapeDebtHtml(item.po)} · ₹${item.amount.toLocaleString('en-IN')}</div>
+        </div>
+        <span class="badge warning">${escapeDebtHtml(fromText)} → ${escapeDebtHtml(toText)}</span>
+      </div>
+      <div style="font-size:10.5px;color:var(--t2);margin-top:7px">Revised by ${escapeDebtHtml(item.revisedByName)}${whenText ? ' · ' + escapeDebtHtml(whenText) : ''}</div>
+      <div style="font-size:11.5px;color:var(--t1);margin-top:6px;background:#FFF8E1;padding:6px 8px;border-radius:6px">"${escapeDebtHtml(item.reason)}"</div>
+    </div>`;
+  }).join('');
+  document.getElementById('commitmentRevisionModal').classList.add('active');
+}
+
+function dismissCommitmentRevisionReminder() {
+  markRevisionIdsSeen(pendingCommitmentRevisionItems().map(item => item.id));
+  closeModal('commitmentRevisionModal');
+  hideNotificationBadge();
+  activeNotificationType = null;
+}
+
+function goToRevisionCommitments() {
+  markRevisionIdsSeen(pendingCommitmentRevisionItems().map(item => item.id));
+  closeModal('commitmentRevisionModal');
   hideNotificationBadge();
   switchTab('commitments');
 }
@@ -3215,6 +3496,22 @@ async function checkNotifications(useCachedInfo = false) {
     return;
   }
 
+  // Updesh/pratim only: surface any commitment date revisions (with reason)
+  // made by someone else since they last checked - this is the "notify
+  // updesh/pratim on login" alert, so they don't have to stumble onto a
+  // changed date on their own.
+  const revisionItems = pendingCommitmentRevisionItems();
+  if (revisionItems.length) {
+    activeNotificationType = 'commitment_revision';
+    showNotificationBadge(`${revisionItems.length} Commitment Revision${revisionItems.length > 1 ? 's' : ''}`);
+    const reminderId = `commitment-revision:${revisionItems.map(item => item.id).join('|')}`;
+    if (autoShownNotificationId !== reminderId) {
+      autoShownNotificationId = reminderId;
+      showCommitmentRevisionReminder(revisionItems);
+    }
+    return;
+  }
+
   if (latestUploadInfo && latestUploadDate) {
     const uploadId = latestUploadInfo.uploadId || latestUploadInfo.uploadedAtIso;
     const seenUploadId = localStorage.getItem(uploadNoticeSeenKey());
@@ -3272,6 +3569,8 @@ function openNotificationModal() {
     showCommitmentReminder();
   } else if (activeNotificationType === 'commitment_deadline') {
     showCommitmentDeadlineReminder();
+  } else if (activeNotificationType === 'commitment_revision') {
+    showCommitmentRevisionReminder();
   }
 }
 
