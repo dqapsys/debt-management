@@ -960,10 +960,10 @@
 </div>
 <!-- ══ NOTIFICATION BADGE ══ -->
 <div id="notificationBadge" style="display: none; position: fixed; top: 20px; right: 20px; z-index: 999;">
-  <div style="background: #FF5252; color: #fff; padding: 12px 16px; border-radius: 8px; box-shadow: 0 4px 12px rgba(255,82,82,0.3); cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 8px;" onclick="openNotificationModal()">
-    <span style="width: 8px; height: 8px; background: #FFD700; border-radius: 50%; animation: pulse 2s infinite;"></span>
+  <div id="notificationPill" style="background: #FF5252; color: #fff; padding: 12px 16px; border-radius: 8px; box-shadow: 0 4px 12px rgba(255,82,82,0.3); cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 8px;" onclick="openNotificationModal()">
+    <span id="notificationDot" style="width: 8px; height: 8px; background: #FFD700; border-radius: 50%; animation: pulse 2s infinite;"></span>
     <span id="notificationText">Action Required</span>
-    <i class="ti ti-bell" style="font-size: 16px;"></i>
+    <i id="notificationIcon" class="ti ti-bell" style="font-size: 16px;"></i>
   </div>
 </div>
 
@@ -1068,15 +1068,15 @@
   </div>
 </div>
 
-<!-- Commitment Revision Notice (Updesh & Pratim only) -->
+<!-- Commitment Revision Notice / Confirmation -->
 <div id="commitmentRevisionModal" class="modal">
   <div class="modal-content" style="max-width: 560px;">
-    <div class="modal-header" style="background: linear-gradient(135deg, #E65100, #BF360C); color: #fff; margin: -20px -20px 20px -20px; padding: 20px; border-radius: 10px 10px 0 0;">
-      <i class="ti ti-calendar-time" style="font-size: 20px; margin-right: 10px;"></i>
-      Commitment Date Revision(s)
+    <div id="commitmentRevisionHeader" class="modal-header" style="background: linear-gradient(135deg, #E65100, #BF360C); color: #fff; margin: -20px -20px 20px -20px; padding: 20px; border-radius: 10px 10px 0 0;">
+      <i id="commitmentRevisionHeaderIcon" class="ti ti-calendar-time" style="font-size: 20px; margin-right: 10px;"></i>
+      <span id="commitmentRevisionHeaderText">Commitment Date Revision(s)</span>
     </div>
 
-    <div style="font-size:13px;line-height:1.55;color:var(--t1);margin-bottom:12px">
+    <div id="commitmentRevisionDesc" style="font-size:13px;line-height:1.55;color:var(--t1);margin-bottom:12px">
       These collection commitments were revised, with a reason, since you last checked.
     </div>
 
@@ -1084,7 +1084,7 @@
 
     <div style="display:flex;gap:8px">
       <button class="btn" onclick="dismissCommitmentRevisionReminder()" style="flex:1">Dismiss</button>
-      <button class="btn primary" onclick="goToRevisionCommitments()" style="flex:1">
+      <button id="commitmentRevisionPrimaryBtn" class="btn primary" onclick="goToRevisionCommitments()" style="flex:1">
         <i class="ti ti-arrow-right"></i> View Commitments
       </button>
     </div>
@@ -2913,6 +2913,7 @@ async function saveCommitmentRevision() {
   closeModal('reviseCommitmentModal');
   currentRevisingCommitmentId = null;
   updateAllTabs();
+  checkNotifications(true);
   showToast('✅ Commitment revised', 'success');
 }
 
@@ -3275,11 +3276,39 @@ function markRevisionIdsSeen(ids) {
 }
 
 // Revision alerts are for updesh/pratim only, and only for revisions made
-// by someone else - no point alerting a person about their own edit.
+// by someone else - no point alerting a person about their own edit (they
+// get a confirmation badge instead - see pendingOwnRevisionConfirmations).
 function pendingCommitmentRevisionItems() {
   if (!canManageCommitments()) return [];
   const seen = getSeenRevisionIds();
   return allCommitmentRevisions().filter(entry => !seen.has(entry.id) && entry.revisedBy !== debtUsername());
+}
+
+function ownRevisionConfirmedKey() {
+  return `debt_revision_confirmed_${debtUsername() || 'unknown'}`;
+}
+
+function getConfirmedOwnRevisionIds() {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(ownRevisionConfirmedKey()) || '[]'));
+  } catch (error) {
+    return new Set();
+  }
+}
+
+function markOwnRevisionsConfirmed(ids) {
+  if (!ids || !ids.length) return;
+  const confirmed = getConfirmedOwnRevisionIds();
+  ids.forEach(id => confirmed.add(id));
+  localStorage.setItem(ownRevisionConfirmedKey(), JSON.stringify(Array.from(confirmed).slice(-300)));
+}
+
+// The flip side of pendingCommitmentRevisionItems: available to ANY user
+// (not just updesh/pratim), this is a "your revision was saved" receipt for
+// the commitments the current user themselves revised, not yet acknowledged.
+function pendingOwnRevisionConfirmations() {
+  const confirmed = getConfirmedOwnRevisionIds();
+  return allCommitmentRevisions().filter(entry => !confirmed.has(entry.id) && entry.revisedBy === debtUsername());
 }
 
 function pendingCommitmentDeadlineItems() {
@@ -3353,40 +3382,74 @@ function goToDeadlineCommitments() {
   switchTab('commitments');
 }
 
-// Revision alert (updesh/pratim only): shown on login (and live, if a
-// revision comes in while they're already on the page) so they don't have
-// to stumble onto a changed date on their own.
-function showCommitmentRevisionReminder(items = pendingCommitmentRevisionItems()) {
+// Revision notice: 'alert' mode is for updesh/pratim, shown for revisions
+// someone else made (on login, and live while already on the page).
+// 'confirm' mode is for the person who just made the revision themselves -
+// a lighter, green "saved" receipt rather than a red call-to-action.
+let revisionModalMode = 'alert';
+
+function showCommitmentRevisionReminder(items = pendingCommitmentRevisionItems(), mode = 'alert') {
   const list = document.getElementById('commitmentRevisionList');
   if (!list) return;
+  revisionModalMode = mode;
+  const isConfirm = mode === 'confirm';
+
+  const header = document.getElementById('commitmentRevisionHeader');
+  const headerIcon = document.getElementById('commitmentRevisionHeaderIcon');
+  const headerText = document.getElementById('commitmentRevisionHeaderText');
+  const desc = document.getElementById('commitmentRevisionDesc');
+  const primaryBtn = document.getElementById('commitmentRevisionPrimaryBtn');
+  if (isConfirm) {
+    header.style.background = 'linear-gradient(135deg, #2E7D32, #1B5E20)';
+    headerIcon.className = 'ti ti-circle-check';
+    headerText.textContent = items.length > 1 ? 'Commitment Revisions Saved' : 'Commitment Revision Saved';
+    desc.textContent = 'Your revised commitment date and reason have been saved.';
+    primaryBtn.innerHTML = '<i class="ti ti-arrow-right"></i> View Commitments';
+  } else {
+    header.style.background = 'linear-gradient(135deg, #E65100, #BF360C)';
+    headerIcon.className = 'ti ti-calendar-time';
+    headerText.textContent = 'Commitment Date Revision(s)';
+    desc.textContent = 'These collection commitments were revised, with a reason, since you last checked.';
+    primaryBtn.innerHTML = '<i class="ti ti-arrow-right"></i> View Commitments';
+  }
+
   list.innerHTML = items.map(item => {
     const fromText = item.fromDate ? new Date(item.fromDate).toLocaleDateString('en-IN') : '—';
     const toText = item.toDate ? new Date(item.toDate).toLocaleDateString('en-IN') : '—';
     const whenText = item.revisedAt ? new Date(item.revisedAt).toLocaleString('en-IN') : '';
-    return `<div class="deadline-item">
+    const byLine = isConfirm ? `Saved${whenText ? ' · ' + escapeDebtHtml(whenText) : ''}` : `Revised by ${escapeDebtHtml(item.revisedByName)}${whenText ? ' · ' + escapeDebtHtml(whenText) : ''}`;
+    return `<div class="deadline-item"${isConfirm ? ' style="border-left-color:#2E7D32;background:#E8F5E9"' : ''}>
       <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">
         <div>
           <div style="font-weight:700">${escapeDebtHtml(item.customer)}</div>
           <div style="font-size:10.5px;color:var(--t2);margin-top:2px">${escapeDebtHtml(item.project)} · PO: ${escapeDebtHtml(item.po)} · ₹${item.amount.toLocaleString('en-IN')}</div>
         </div>
-        <span class="badge warning">${escapeDebtHtml(fromText)} → ${escapeDebtHtml(toText)}</span>
+        <span class="badge ${isConfirm ? 'success' : 'warning'}">${escapeDebtHtml(fromText)} → ${escapeDebtHtml(toText)}</span>
       </div>
-      <div style="font-size:10.5px;color:var(--t2);margin-top:7px">Revised by ${escapeDebtHtml(item.revisedByName)}${whenText ? ' · ' + escapeDebtHtml(whenText) : ''}</div>
-      <div style="font-size:11.5px;color:var(--t1);margin-top:6px;background:#FFF8E1;padding:6px 8px;border-radius:6px">"${escapeDebtHtml(item.reason)}"</div>
+      <div style="font-size:10.5px;color:var(--t2);margin-top:7px">${byLine}</div>
+      <div style="font-size:11.5px;color:var(--t1);margin-top:6px;background:${isConfirm ? '#fff' : '#FFF8E1'};padding:6px 8px;border-radius:6px">"${escapeDebtHtml(item.reason)}"</div>
     </div>`;
   }).join('');
   document.getElementById('commitmentRevisionModal').classList.add('active');
 }
 
 function dismissCommitmentRevisionReminder() {
-  markRevisionIdsSeen(pendingCommitmentRevisionItems().map(item => item.id));
+  if (revisionModalMode === 'confirm') {
+    markOwnRevisionsConfirmed(pendingOwnRevisionConfirmations().map(item => item.id));
+  } else {
+    markRevisionIdsSeen(pendingCommitmentRevisionItems().map(item => item.id));
+  }
   closeModal('commitmentRevisionModal');
   hideNotificationBadge();
   activeNotificationType = null;
 }
 
 function goToRevisionCommitments() {
-  markRevisionIdsSeen(pendingCommitmentRevisionItems().map(item => item.id));
+  if (revisionModalMode === 'confirm') {
+    markOwnRevisionsConfirmed(pendingOwnRevisionConfirmations().map(item => item.id));
+  } else {
+    markRevisionIdsSeen(pendingCommitmentRevisionItems().map(item => item.id));
+  }
   closeModal('commitmentRevisionModal');
   hideNotificationBadge();
   switchTab('commitments');
@@ -3483,6 +3546,38 @@ async function checkNotifications(useCachedInfo = false) {
     return;
   }
 
+  // Any user: a green confirmation badge for a commitment THEY themselves
+  // just revised - checked first since it's the freshest, most immediate
+  // feedback for whoever just acted, distinct from the "alert" for others.
+  const ownConfirmItems = pendingOwnRevisionConfirmations();
+  if (ownConfirmItems.length) {
+    activeNotificationType = 'commitment_revision_confirm';
+    showNotificationBadge(`${ownConfirmItems.length} Revision${ownConfirmItems.length > 1 ? 's' : ''} Saved`, 'confirm');
+    const reminderId = `commitment-revision-confirm:${ownConfirmItems.map(item => item.id).join('|')}`;
+    if (autoShownNotificationId !== reminderId) {
+      autoShownNotificationId = reminderId;
+      showCommitmentRevisionReminder(ownConfirmItems, 'confirm');
+    }
+    return;
+  }
+
+  // Updesh/pratim only: surface any commitment date revisions (with reason)
+  // made by someone else since they last checked. Checked BEFORE the
+  // deadline-items block below on purpose - deadline items are an ongoing,
+  // recurring status that can persist indefinitely, and would otherwise
+  // permanently mask a one-time revision notice from ever appearing.
+  const revisionItems = pendingCommitmentRevisionItems();
+  if (revisionItems.length) {
+    activeNotificationType = 'commitment_revision';
+    showNotificationBadge(`${revisionItems.length} Commitment Revision${revisionItems.length > 1 ? 's' : ''}`);
+    const reminderId = `commitment-revision:${revisionItems.map(item => item.id).join('|')}`;
+    if (autoShownNotificationId !== reminderId) {
+      autoShownNotificationId = reminderId;
+      showCommitmentRevisionReminder(revisionItems, 'alert');
+    }
+    return;
+  }
+
   const deadlineItems = pendingCommitmentDeadlineItems();
   if (deadlineItems.length) {
     activeNotificationType = 'commitment_deadline';
@@ -3492,22 +3587,6 @@ async function checkNotifications(useCachedInfo = false) {
     if (shouldShowCommitmentDeadlineReminder(deadlineItems) && autoShownNotificationId !== reminderId) {
       autoShownNotificationId = reminderId;
       showCommitmentDeadlineReminder(deadlineItems);
-    }
-    return;
-  }
-
-  // Updesh/pratim only: surface any commitment date revisions (with reason)
-  // made by someone else since they last checked - this is the "notify
-  // updesh/pratim on login" alert, so they don't have to stumble onto a
-  // changed date on their own.
-  const revisionItems = pendingCommitmentRevisionItems();
-  if (revisionItems.length) {
-    activeNotificationType = 'commitment_revision';
-    showNotificationBadge(`${revisionItems.length} Commitment Revision${revisionItems.length > 1 ? 's' : ''}`);
-    const reminderId = `commitment-revision:${revisionItems.map(item => item.id).join('|')}`;
-    if (autoShownNotificationId !== reminderId) {
-      autoShownNotificationId = reminderId;
-      showCommitmentRevisionReminder(revisionItems);
     }
     return;
   }
@@ -3551,8 +3630,22 @@ function showCommitmentReminder() {
   document.getElementById('commitmentReminderModal').classList.add('active');
 }
 
-function showNotificationBadge(text) {
+function showNotificationBadge(text, variant = 'alert') {
   document.getElementById('notificationText').textContent = text;
+  const pill = document.getElementById('notificationPill');
+  const dot = document.getElementById('notificationDot');
+  const icon = document.getElementById('notificationIcon');
+  if (variant === 'confirm') {
+    pill.style.background = '#2E7D32';
+    pill.style.boxShadow = '0 4px 12px rgba(46,125,50,.35)';
+    dot.style.background = '#C8E6C9';
+    if (icon) icon.className = 'ti ti-circle-check';
+  } else {
+    pill.style.background = '#FF5252';
+    pill.style.boxShadow = '0 4px 12px rgba(255,82,82,.3)';
+    dot.style.background = '#FFD700';
+    if (icon) icon.className = 'ti ti-bell';
+  }
   document.getElementById('notificationBadge').style.display = 'flex';
   updateFaviconBadge(text);
 }
@@ -3570,7 +3663,9 @@ function openNotificationModal() {
   } else if (activeNotificationType === 'commitment_deadline') {
     showCommitmentDeadlineReminder();
   } else if (activeNotificationType === 'commitment_revision') {
-    showCommitmentRevisionReminder();
+    showCommitmentRevisionReminder(pendingCommitmentRevisionItems(), 'alert');
+  } else if (activeNotificationType === 'commitment_revision_confirm') {
+    showCommitmentRevisionReminder(pendingOwnRevisionConfirmations(), 'confirm');
   }
 }
 
