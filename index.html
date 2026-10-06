@@ -1493,7 +1493,7 @@ async function persistUploadedMonthlyCycle() {
 //   archive cycle id so they remain there for audit but no longer show as
 //   "current".
 async function rolloverCommitmentsOnUpload(previousCycleId, newCycleId, uploadId) {
-  if (!commitmentsData.length && !allocationsData.length) return;
+  if (!commitmentsData.length && !allocationsData.length && !collectionsData.length) return;
 
   const isGenuineRollover = previousCycleId && previousCycleId !== newCycleId;
   const archiveCycleId = isGenuineRollover ? previousCycleId : `${previousCycleId || newCycleId}-closed-${uploadId}`;
@@ -1555,12 +1555,12 @@ async function clearCurrentCycleCommitments() {
     showToast('No active cycle to clear', 'error');
     return;
   }
-  const allocCount = allocationsData.length, commitCount = commitmentsData.length;
-  if (!allocCount && !commitCount) {
-    showToast('Nothing to clear - this cycle already has no commitments', 'success');
+  const allocCount = allocationsData.length, commitCount = commitmentsData.length, collCount = collectionsData.length;
+  if (!allocCount && !commitCount && !collCount) {
+    showToast('Nothing to clear - this cycle already has no commitments or collections', 'success');
     return;
   }
-  if (!confirm(`This deletes all ${allocCount} project/PO link(s) and ${commitCount} commitment(s) for the current cycle, for every customer - including any not yet collected. This cannot be undone from within the app. Continue?`)) return;
+  if (!confirm(`This deletes all ${allocCount} project/PO link(s) and ${commitCount} commitment(s) for the current cycle, for every customer - including any not yet collected. The ${collCount} collection record(s) are not deleted; they are archived out of this cycle so they stop counting on the dashboard. This cannot be undone from within the app. Continue?`)) return;
 
   showToast('Clearing commitments...', 'success');
   try {
@@ -1576,8 +1576,18 @@ async function clearCurrentCycleCommitments() {
       commitIds.slice(start, start + 400).forEach(id => batch.delete(db.collection(DEBT_COMMITMENTS_COLLECTION).doc(id)));
       await batch.commit();
     }
+    // Collections are financial history: archive (re-tag), never delete, so
+    // they no longer count in the current cycle but stay in Firestore.
+    const archiveCycleId = `${currentCycleId}-closed-${Date.now()}`;
+    const collIds = collectionsData.map(r => r.id).filter(Boolean);
+    for (let start = 0; start < collIds.length; start += 400) {
+      const batch = db.batch();
+      collIds.slice(start, start + 400).forEach(id => batch.set(db.collection(DEBT_COLLECTIONS_COLLECTION).doc(id), { cycleId: archiveCycleId, migratedAt: firebase.firestore.FieldValue.serverTimestamp(), migratedBy: currentUser }, { merge: true }));
+      await batch.commit();
+    }
     allocationsData = [];
     commitmentsData = [];
+    collectionsData = [];
     saveToLocalStorage();
     updateAllTabs();
     showToast('Commitments cleared - every customer now starts fresh', 'success');
@@ -1831,7 +1841,11 @@ function commitmentRowMatchesFilters(row) {
     && textMatchesFilter(row.responsibleText, f.responsible);
 }
 function customerSettlement(customerName) {
-  return collectionsData.filter(record => record.cycleId === currentCycleId && record.customer === customerName)
+  // Only collections attached to a commitment that still exists count. An
+  // orphaned record (its commitment was deleted) must not reduce outstanding
+  // or hide the customer from the Commitments page.
+  const liveCommitmentIds = new Set(commitmentsData.filter(c => c.customer === customerName).map(c => c.id));
+  return collectionsData.filter(record => record.cycleId === currentCycleId && record.customer === customerName && liveCommitmentIds.has(record.commitmentId))
     .reduce((totals, record) => {
       totals.collected += Number(record.amount || 0);
       totals.deductions += Number(record.deductionTotal || 0);
@@ -1916,13 +1930,15 @@ function updateSummary() {
   const monthEndStr = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, '0')}-01`;
   const committedThisMonth = commitmentsData.filter(c => visibleNames.has(c.customer) && c.commitDate && c.commitDate >= monthStartStr && c.commitDate < monthEndStr).reduce((s, c) => s + Number(c.amount || 0), 0);
 
-  // Collections till date - ALL cycles, not just the current one, unlike the
-  // per-customer "settled this cycle" figure used for Net Outstanding above.
-  const collectedTillDate = collectionsData.filter(record => visibleNames.has(record.customer)).reduce((s, record) => s + Number(record.amount || 0), 0);
-  const collectedPct = committedThisMonth > 0 ? (collectedTillDate / committedThisMonth) * 100 : 0;
-
-  // Collected for the current calendar month (collectionDate falls within this month)
+  // Collected for the current calendar month (collectionDate falls within this month).
+  // Records carried into this cycle from an earlier month (partially collected
+  // commitments) keep their original date and are deliberately NOT counted here.
   const collectedThisMonth = collectionsData.filter(record => visibleNames.has(record.customer) && record.collectionDate && record.collectionDate >= monthStartStr && record.collectionDate < monthEndStr).reduce((s, record) => s + Number(record.amount || 0), 0);
+
+  // "Collections till date" = month-to-date, on the same basis as the
+  // committed-this-month figure it is compared against below.
+  const collectedTillDate = collectedThisMonth;
+  const collectedPct = committedThisMonth > 0 ? (collectedTillDate / committedThisMonth) * 100 : 0;
 
   // Gap = Monthly Committed - Monthly Collected.
   // Positive = shortfall against what was committed this month (deficit, red).
