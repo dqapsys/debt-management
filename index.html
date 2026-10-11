@@ -689,6 +689,7 @@
       <div class="table-tools">
         <input class="search" type="text" id="commitmentsSearch" placeholder="Search Commitments..." oninput="setDebtTableFilter('commitments','search',this.value)">
         <button class="btn sm" onclick="resetDebtTableFilters('commitments')"><i class="ti ti-filter-x"></i> Clear Filters</button>
+        <button class="btn sm" id="realignOwnersBtn" onclick="realignCommitmentOwners()" style="display:none" title="Re-stamps every commitment with the person its customer is assigned to, so existing collections and settlements are credited to them."><i class="ti ti-user-check"></i> Align Owners to Customer Assignment</button>
         <button class="btn sm" id="clearCycleCommitmentsBtn" onclick="clearCurrentCycleCommitments()" style="display:none;color:#c00;border-color:#ffcdd2" title="Removes all current-cycle commitments and allocations so the Link modal starts fresh for every customer. Use this once after deploying the fresh-start fix, or any time you want to force a clean slate without waiting for the next CSV upload."><i class="ti ti-eraser"></i> Clear All Commitments (Fresh Start)</button>
       </div>
       <div style="overflow-x:auto">
@@ -1629,6 +1630,37 @@ async function rolloverCommitmentsOnUpload(previousCycleId, newCycleId, uploadId
 // deleted outright (not just unlinked) since, unlike a cycle rollover, there
 // is no "next cycle" boundary to leave them archived under - this is an
 // explicit, confirmed, admin-only action.
+// One-click data correction: every commitment gets the owner of its customer's
+// assignment. Collections/settlements follow their commitment, so the credit
+// moves with it. Customers with several assignees or none are left untouched.
+async function realignCommitmentOwners() {
+  if (!canManageCommitments()) { showToast('Only updesh and pratim can do this', 'error'); return; }
+  const changes = commitmentsData.map(c => {
+    const owners = customerAssignedUsers(c.customer);
+    if (owners.length !== 1) return null;
+    const owner = owners[0];
+    if (c.assignedUsername === owner.username) return null;
+    return { c, owner };
+  }).filter(Boolean);
+  if (!changes.length) { showToast('All commitments already match their customer assignments', 'success'); return; }
+  const preview = changes.slice(0, 12).map(x => `• ${x.c.customer}: ${x.c.assignedTo || x.c.assignedUsername || '-'} → ${x.owner.fullName || x.owner.username}`).join('\n');
+  if (!confirm(`Re-assign ${changes.length} commitment(s) to their customer's assigned owner?\n\n${preview}${changes.length > 12 ? '\n…' : ''}`)) return;
+  try {
+    for (let start = 0; start < changes.length; start += 400) {
+      const batch = db.batch();
+      changes.slice(start, start + 400).forEach(({ c, owner }) => batch.set(db.collection(DEBT_COMMITMENTS_COLLECTION).doc(c.id),
+        { assignedUsername: owner.username, assignedTo: owner.fullName || owner.username, ownerRealignedAt: new Date(), ownerRealignedBy: currentUser }, { merge: true }));
+      await batch.commit();
+    }
+    changes.forEach(({ c, owner }) => { c.assignedUsername = owner.username; c.assignedTo = owner.fullName || owner.username; });
+    saveToLocalStorage();
+    updateAllTabs();
+    showToast(`✅ ${changes.length} commitment(s) re-assigned`, 'success');
+  } catch (error) {
+    showToast('Could not re-assign: ' + error.message, 'error');
+  }
+}
+
 async function clearCurrentCycleCommitments() {
   if (!canManageCommitments()) {
     showToast('Only updesh and pratim can clear commitments', 'error');
@@ -1863,6 +1895,13 @@ function debtDaysBetween(from, to) {
   const start = new Date(from); start.setHours(0,0,0,0);
   const end = new Date(to); end.setHours(0,0,0,0);
   return Math.ceil((end - start) / 86400000);
+}
+// True when the commitment's customer is assigned to the logged-in user (or,
+// for unassigned customers, the commitment itself is stamped with them).
+function commitmentOwnedByMe(commitment) {
+  if (!commitment) return false;
+  const me = debtUsername();
+  return responsibleUsersForCustomer(commitment.customer, commitment).some(user => String(user.username || '').toLowerCase() === me);
 }
 function responsibleUsersForCustomer(customerName, fallbackCommitment = null) {
   const assigned = customerAssignedUsers(customerName);
@@ -2224,8 +2263,8 @@ function updateCommitments() {
     const settlement = customerSettlement(customer.customerName);
     const net = netOutstandingValue(customer.outstanding, settlement.collected + settlement.deductions);
     const users = customerAssignedUsers(customer.customerName).map(user => escapeDebtHtml(user.fullName || user.username)).join(', ') || 'Unassigned';
-    const customerAllocations = allocationsData.filter(allocation => allocation.customer === customer.customerName && (canSeeAllDebtCustomers() || !commitmentsData.some(item => item.allocationId === allocation.id) || commitmentsData.find(item => item.allocationId === allocation.id)?.assignedUsername === debtUsername()));
-    const commitments = commitmentsData.filter(commitment => commitment.customer === customer.customerName && (canSeeAllDebtCustomers() || commitment.assignedUsername === debtUsername()));
+    const customerAllocations = allocationsData.filter(allocation => allocation.customer === customer.customerName && (canSeeAllDebtCustomers() || !commitmentsData.some(item => item.allocationId === allocation.id) || commitmentOwnedByMe(commitmentsData.find(item => item.allocationId === allocation.id))));
+    const commitments = commitmentsData.filter(commitment => commitment.customer === customer.customerName && (canSeeAllDebtCustomers() || commitmentOwnedByMe(commitment)));
     const commitmentEntries = commitments.map(commitment => {
       const allocation = allocationsData.find(item => item.id === commitment.allocationId) || {};
       const amount = Number(commitment.amount || 0);
@@ -2251,7 +2290,7 @@ function updateCommitments() {
           <div><span>TDS / TCS</span><b>₹${deductions.toLocaleString('en-IN')}</b></div>
           <div><span>Settled (non-cash)</span><b style="color:#6A1B9A">₹${Number(commitment.settlements || 0).toLocaleString('en-IN')}</b></div>
           <div><span>Remaining</span><b style="color:${remaining ? 'var(--p)' : '#1B5E20'}">₹${remaining.toLocaleString('en-IN')}</b></div>
-          <div><span>Responsible</span><b>${escapeDebtHtml(commitment.assignedTo || commitment.assignedUsername || '—')}</b></div>
+          <div><span>Responsible</span><b>${escapeDebtHtml(responsibleTextForCustomer(commitment.customer, commitment))}</b></div>
         </div>
         <div class="commitment-card-actions">${recordButton}${reviseButton}${manageButtons}</div>
       </div>`;
@@ -2270,8 +2309,8 @@ function updateCommitments() {
     // customers are deliberately kept - see the deadline-counter exclusion
     // below for where their "not collectible" status is actually handled.
     if (net === 0) return [];
-    const visibleCommitments = commitmentsData.filter(commitment => commitment.customer === customer.customerName && (canSeeAllDebtCustomers() || commitment.assignedUsername === debtUsername()));
-    const visibleCustomerAllocations = allocationsData.filter(allocation => allocation.customer === customer.customerName && (canSeeAllDebtCustomers() || !commitmentsData.some(item => item.allocationId === allocation.id) || commitmentsData.find(item => item.allocationId === allocation.id)?.assignedUsername === debtUsername()));
+    const visibleCommitments = commitmentsData.filter(commitment => commitment.customer === customer.customerName && (canSeeAllDebtCustomers() || commitmentOwnedByMe(commitment)));
+    const visibleCustomerAllocations = allocationsData.filter(allocation => allocation.customer === customer.customerName && (canSeeAllDebtCustomers() || !commitmentsData.some(item => item.allocationId === allocation.id) || commitmentOwnedByMe(commitmentsData.find(item => item.allocationId === allocation.id))));
     const pendingAllocations = visibleCustomerAllocations.filter(allocation => !commitmentsData.some(item => item.allocationId === allocation.id));
     const linkButton = canPlanDebtCustomer(customer.customerName) ? `<button class="btn sm commit" data-customer="${escapeDebtHtml(customer.customerName)}" onclick="openLinkModal(this.dataset.customer)"><i class="ti ti-link"></i> Link PO & Commit</button>` : '';
     const rows = visibleCommitments.map(commitment => {
@@ -2344,7 +2383,7 @@ function updateCommitments() {
     if (!visibleNames.has(allocation.customer)) return false;
     if (canSeeAllDebtCustomers()) return true;
     const commitment = commitmentsData.find(item => item.allocationId === allocation.id);
-    return !commitment || commitment.assignedUsername === debtUsername();
+    return !commitment || commitmentOwnedByMe(commitment);
   });
   if (visibleAllocations.length === 0) {
     tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: var(--t2);">No allocations yet</td></tr>';
@@ -2374,7 +2413,7 @@ function updateCommitments() {
       }
     }
     
-    const assigned = commit ? commit.assignedTo : '-';
+    const assigned = commit ? responsibleTextForCustomer(commit.customer, commit) : '-';
     const commitDate = commit ? new Date(commit.commitDate).toLocaleDateString('en-IN') : '-';
     const collected = commit ? `₹${Number(commit.collected || 0).toLocaleString('en-IN')}${Number(commit.deductions || 0)?`<div style="font-size:9px;color:var(--t2)">+ ₹${Number(commit.deductions || 0).toLocaleString('en-IN')} deductions</div>`:''}` : '-';
     
@@ -2426,13 +2465,22 @@ function updateLeaderboard() {
 
   // Sum up commitments by user - only count COMMITTED amounts
   commitmentsData.forEach(c => {
-    const key = c.assignedUsername || c.assignedTo;
-    if (!key) return;
-    if (!stats[key]) stats[key] = { name: c.assignedTo || key, count: 0, committed: 0, collected: 0, settled: 0 };
-    stats[key].count++;
-    stats[key].committed += c.amount;
-    stats[key].collected += Number(c.collected || 0) + Number(c.deductions || 0); // cash + TDS/TCS only
-    stats[key].settled += Number(c.settlements || 0);                              // approved settlements, shown separately
+    // Credit goes to the person the CUSTOMER is assigned to, never to whoever
+    // happened to be logged in when the commitment/collection was entered.
+    // Several assignees share equally. Falls back to the commitment's own
+    // responsible person only when the customer has no assignment.
+    const owners = responsibleUsersForCustomer(c.customer, c);
+    if (!owners.length) return;
+    const share = 1 / owners.length;
+    owners.forEach(owner => {
+      const key = owner.username || owner.fullName;
+      if (!key) return;
+      if (!stats[key]) stats[key] = { name: owner.fullName || owner.username, count: 0, committed: 0, collected: 0, settled: 0 };
+      stats[key].count++;
+      stats[key].committed += Number(c.amount || 0) * share;
+      stats[key].collected += (Number(c.collected || 0) + Number(c.deductions || 0)) * share; // cash + TDS/TCS only
+      stats[key].settled += Number(c.settlements || 0) * share;                                // approved settlements, shown separately
+    });
   });
   
   const sorted = Object.values(stats).filter(s => s.count > 0).sort((a, b) => b.collected - a.collected);
@@ -2522,7 +2570,7 @@ async function openLinkModal(customerName) {
   const customerAllocations = allocationsData.filter(a => a.customer === customerName);
   const managedAllocations = canAssignDebtCustomers() ? customerAllocations : customerAllocations.filter(allocation => {
     const commitment = commitmentsData.find(item => item.allocationId === allocation.id);
-    return commitment ? commitment.assignedUsername === debtUsername() : true;
+    return commitment ? commitmentOwnedByMe(commitment) : true;
   });
   currentManagedAllocationIds = managedAllocations.map(allocation => allocation.id);
   tempAllocations = managedAllocations.map(allocation => {
@@ -2794,8 +2842,8 @@ async function saveAllocations() {
       const id = existing?.id || db.collection(DEBT_COMMITMENTS_COLLECTION).doc().id;
       const commitment = {
         id, cycleId: currentCycleId, allocationId: allocation.id, customer: allocation.customer,
-        amount: Number(allocation.amount || 0), assignedTo: existing?.assignedTo || currentUserData?.fullName || currentUserData?.displayName || currentUser,
-        assignedUsername: existing?.assignedUsername || debtUsername(), commitDate: allocation.commitDate,
+        amount: Number(allocation.amount || 0), assignedTo: existing?.assignedTo || customerAssignedUsers(allocation.customer)[0]?.fullName || currentUserData?.fullName || currentUserData?.displayName || currentUser,
+        assignedUsername: existing?.assignedUsername || customerAssignedUsers(allocation.customer)[0]?.username || debtUsername(), commitDate: allocation.commitDate,
         createdAt: existing?.createdAt || new Date(), updatedAt: new Date(), updatedBy: currentUser
       };
       batch.set(db.collection(DEBT_COMMITMENTS_COLLECTION).doc(id), commitment, { merge: true });
@@ -3467,7 +3515,7 @@ function canManageCommitments() {
 // the responsible person themselves who best knows why a payment slipped.
 function canReviseCommitment(commitment) {
   if (!commitment) return false;
-  return canManageCommitments() || commitment.assignedUsername === debtUsername();
+  return canManageCommitments() || commitmentOwnedByMe(commitment);
 }
 
 function canEditAllCommitments() {
@@ -3487,6 +3535,8 @@ function applyDebtPermissions() {
   });
   const clearBtn = document.getElementById('clearCycleCommitmentsBtn');
   if (clearBtn) clearBtn.style.display = canManageCommitments() ? 'inline-flex' : 'none';
+  const realignBtn = document.getElementById('realignOwnersBtn');
+  if (realignBtn) realignBtn.style.display = canManageCommitments() ? 'inline-flex' : 'none';
 
   // dev starts on Upload; everyone else starts on the universally visible Summary.
   switchTab(canUploadCSV() ? 'upload' : 'summary');
