@@ -602,8 +602,15 @@
       </div>
       <div class="stat">
         <div style="display:flex;align-items:center;gap:8px">
+          <div class="stat-icon">🤝</div>
+          <div class="stat-label">Settlements - current month <span id="statSettledPending" style="color:#FFB74D"></span></div>
+        </div>
+        <div class="stat-value" id="statSettled" title="Approved LD / Other settlements. Not counted as collections.">₹0</div>
+      </div>
+      <div class="stat">
+        <div style="display:flex;align-items:center;gap:8px">
           <div class="stat-icon" id="statGapIcon">⚖️</div>
-          <div class="stat-label">Gap (monthly committed vs monthly collected)</div>
+          <div class="stat-label">Gap (monthly committed vs collected + settled)</div>
         </div>
         <div class="stat-value" id="statGap">₹0</div>
       </div>
@@ -638,6 +645,8 @@
                 <option value="committed">Committed</option>
                 <option value="partial">Partial</option>
                 <option value="collected">Collected</option>
+                <option value="settled">Settled</option>
+                <option value="settlement pending">Settlement Pending</option>
                 <option value="delayed">Delayed</option>
               </select>
             </th>
@@ -692,7 +701,7 @@
               <th style="text-align:right">Committed</th>
               <th>Commitment Date</th>
               <th style="text-align:right">Collected</th>
-              <th style="text-align:right">Deductions</th>
+              <th style="text-align:right">TDS / TCS<br><span style="font-size:9px;font-weight:500">+ Settled</span></th>
               <th style="text-align:right">Remaining</th>
               <th>Status</th>
               <th>Responsible</th>
@@ -710,6 +719,8 @@
                   <option value="committed">Committed</option>
                   <option value="partial">Partial</option>
                   <option value="collected">Collected</option>
+                  <option value="settled">Settled</option>
+                  <option value="settlement pending">Settlement Pending</option>
                   <option value="delayed">Delayed</option>
                 </select>
               </th>
@@ -906,7 +917,7 @@
       <label>Deductions</label>
       <div id="deductionRows"></div>
       <button type="button" class="btn sm" onclick="addDeductionRow()" style="margin-top:7px">+ Add Deduction</button>
-      <div style="font-size:10px;color:var(--t2);margin-top:5px">Supported: TDS, TCS, LD and Other. Other requires remarks.</div>
+      <div style="font-size:10px;color:var(--t2);margin-top:5px">TDS and TCS count as collections. LD and Other are settlements (no money received): remarks are required, they are reported separately, and they take effect only after approval by Pratim and then Updesh.</div>
     </div>
     
     <div style="display: flex; gap: 8px;">
@@ -1091,6 +1102,26 @@
   </div>
 </div>
 
+<!-- Settlement Approval (Pratim first, then Updesh) -->
+<div id="settlementApprovalModal" class="modal">
+  <div class="modal-content" style="max-width: 600px;">
+    <div class="modal-header" style="background: linear-gradient(135deg, #6A1B9A, #4A148C); color: #fff; margin: -20px -20px 20px -20px; padding: 20px; border-radius: 10px 10px 0 0;">
+      <i class="ti ti-scale" style="font-size: 20px; margin-right: 10px;"></i>
+      Settlement Approval
+    </div>
+
+    <div style="font-size:13px;line-height:1.55;color:var(--t1);margin-bottom:12px">
+      These settlements (LD / Other) close part of a commitment without any payment being received. Each needs approval from Pratim and then Updesh before it counts. They are never counted as collections.
+    </div>
+
+    <div id="settlementApprovalList" class="deadline-list" style="max-height:55vh"></div>
+
+    <div style="display:flex;gap:8px">
+      <button class="btn" onclick="closeModal('settlementApprovalModal')" style="flex:1">Later</button>
+    </div>
+  </div>
+</div>
+
 <style>
   @keyframes pulse {
     0%, 100% { opacity: 1; }
@@ -1136,7 +1167,7 @@ let debtFilterState = {
 };
 const COMMITMENT_DEADLINE_DAYS = 3;
 const COMMITMENT_DEADLINE_SNOOZE_HOURS = 6;
-const DEBT_BUILD = '20260702.1';
+const DEBT_BUILD = '20261011.1';
 
 // ══ WIKI-INTEGRATED AUTHENTICATION ══
 // Check for Wiki session or fallback to standalone mode
@@ -1278,13 +1309,64 @@ function debtCycleIdForDate(value = new Date()) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
 
+// ══ Collections vs settlements ══
+// COLLECTION = cash received + TDS + TCS. This is credited to the responsible
+//   user and drives the leaderboard.
+// SETTLEMENT = LD / Other. No money changes hands (full-and-final settlement,
+//   correction, penalty). It reduces what the customer owes but is NEVER
+//   counted as a collection, and only takes effect once approved by Pratim
+//   and then Updesh. Pending and rejected settlements count for nothing.
+// Records saved before this split have no recordType: their cash and TDS/TCS
+// are collections, and any LD/Other they carried is treated as an already
+// approved settlement so historical numbers do not move.
+const COLLECTION_DEDUCTION_TYPES = ['TDS', 'TCS'];
+const SETTLEMENT_APPROVAL_STEPS = { pending_pratim: 'pratim', pending_updesh: 'updesh' };
+
+function isSettlementRecord(record) { return !!record && record.recordType === 'settlement'; }
+
+function splitRecordDeductions(record) {
+  const list = Array.isArray(record.deductions) ? record.deductions : null;
+  if (!list) return { collection: Number(record.deductionTotal || 0), settlement: 0 };
+  let collection = 0, settlement = 0;
+  list.forEach(item => {
+    const amt = Number(item.amount || 0);
+    if (COLLECTION_DEDUCTION_TYPES.includes(item.type)) collection += amt; else settlement += amt;
+  });
+  return { collection, settlement };
+}
+function settlementRawTotal(record) {
+  if (record.settlementTotal !== undefined && record.settlementTotal !== null) return Number(record.settlementTotal || 0);
+  return splitRecordDeductions(record).settlement;
+}
+function recordCashAmount(record) { return isSettlementRecord(record) ? 0 : Number(record.amount || 0); }
+function recordTdsTcs(record) { return isSettlementRecord(record) ? 0 : splitRecordDeductions(record).collection; }
+function recordCollectionValue(record) { return recordCashAmount(record) + recordTdsTcs(record); }
+function recordSettlementValue(record) {
+  if (isSettlementRecord(record)) return record.approvalStatus === 'approved' ? settlementRawTotal(record) : 0;
+  return splitRecordDeductions(record).settlement;
+}
+function recordPendingSettlement(record) {
+  return isSettlementRecord(record) && SETTLEMENT_APPROVAL_STEPS[record.approvalStatus] ? settlementRawTotal(record) : 0;
+}
+function debtDisplayName(username) {
+  const key = String(username || '').trim().toLowerCase();
+  return wikiUsers.find(user => user.username === key)?.fullName || username || 'Unknown';
+}
+function leaderboardAmount(value) {
+  const n = Number(value || 0);
+  return n >= 100000 ? `₹${(n / 100000).toFixed(1)}L` : `₹${Math.round(n).toLocaleString('en-IN')}`;
+}
+
 function applyCollectionLedgerTotals() {
   commitmentsData.forEach(commitment => {
     const records = collectionsData.filter(record => record.commitmentId === commitment.id);
-    commitment.collected = records.reduce((sum, record) => sum + Number(record.amount || 0), 0);
-    commitment.deductions = records.reduce((sum, record) => sum + Number(record.deductionTotal || 0), 0);
-    commitment.settled = commitment.collected + commitment.deductions;
-    commitment.collectionDate = records.sort((a, b) => String(b.collectionDate || '').localeCompare(String(a.collectionDate || '')))[0]?.collectionDate || null;
+    commitment.collected = records.reduce((sum, record) => sum + recordCashAmount(record), 0);      // cash
+    commitment.deductions = records.reduce((sum, record) => sum + recordTdsTcs(record), 0);          // TDS + TCS
+    commitment.settlements = records.reduce((sum, record) => sum + recordSettlementValue(record), 0); // approved LD/Other
+    commitment.pendingSettlement = records.reduce((sum, record) => sum + recordPendingSettlement(record), 0);
+    commitment.settled = commitment.collected + commitment.deductions + commitment.settlements;
+    commitment.collectionDate = records.filter(record => recordCollectionValue(record) + recordSettlementValue(record) > 0)
+      .sort((a, b) => String(b.collectionDate || '').localeCompare(String(a.collectionDate || '')))[0]?.collectionDate || null;
   });
 }
 
@@ -1341,6 +1423,7 @@ function startDebtCycleListeners() {
     db.collection(DEBT_COLLECTIONS_COLLECTION).where('cycleId', '==', currentCycleId).onSnapshot(snapshot => {
       collectionsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       applyCollectionLedgerTotals(); updateAllTabs(); saveToLocalStorage();
+      checkNotifications(true);
     }, onError),
     db.collection(DEBT_ASSIGNMENTS_COLLECTION).onSnapshot(snapshot => {
       assignmentsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -1524,7 +1607,7 @@ async function rolloverCommitmentsOnUpload(previousCycleId, newCycleId, uploadId
   await batchWrite(retainedAllocations, DEBT_ALLOCATIONS_COLLECTION, () => ({
     cycleId: newCycleId, carriedForward: true, needsRevisedDate: true, updatedAt: new Date(), updatedBy: currentUser
   }));
-  await batchWrite(retainedCollections, DEBT_COLLECTIONS_COLLECTION, () => ({ cycleId: newCycleId }));
+  await batchWrite(retainedCollections, DEBT_COLLECTIONS_COLLECTION, () => ({ cycleId: newCycleId, inCsvBaseline: true }));
 
   // Clear the fully-collected ones out of the active view (archived, not deleted).
   await batchWrite(clearedCommitments, DEBT_COMMITMENTS_COLLECTION, () => ({ cycleId: archiveCycleId }));
@@ -1535,7 +1618,7 @@ async function rolloverCommitmentsOnUpload(previousCycleId, newCycleId, uploadId
   // once startDebtCycleListeners() reattaches under the new cycle id.
   commitmentsData = retainedCommitments.map(c => ({ ...c, cycleId: newCycleId, carriedForward: true, needsRevisedDate: true }));
   allocationsData = retainedAllocations.map(a => ({ ...a, cycleId: newCycleId, carriedForward: true, needsRevisedDate: true }));
-  collectionsData = retainedCollections.map(r => ({ ...r, cycleId: newCycleId }));
+  collectionsData = retainedCollections.map(r => ({ ...r, cycleId: newCycleId, inCsvBaseline: true }));
 }
 
 // On-demand version of a full "fresh start" - unlike the automatic upload
@@ -1840,17 +1923,31 @@ function commitmentRowMatchesFilters(row) {
     && textMatchesFilter(row.statusKey, f.status)
     && textMatchesFilter(row.responsibleText, f.responsible);
 }
+// A payment dated before the current cycle's month began is already reflected
+// in that cycle's Tally CSV outstanding, so it must not be netted off again.
+function collectionAlreadyInCsv(record) {
+  if (record.inCsvBaseline) return true;
+  const m = /^(\d{4})-(\d{2})/.exec(String(currentCycleId || ''));
+  if (!m || !record.collectionDate) return false;
+  return String(record.collectionDate).slice(0, 7) < `${m[1]}-${m[2]}`;
+}
+
 function customerSettlement(customerName) {
   // Only collections attached to a commitment that still exists count. An
   // orphaned record (its commitment was deleted) must not reduce outstanding
   // or hide the customer from the Commitments page.
   const liveCommitmentIds = new Set(commitmentsData.filter(c => c.customer === customerName).map(c => c.id));
-  return collectionsData.filter(record => record.cycleId === currentCycleId && record.customer === customerName && liveCommitmentIds.has(record.commitmentId))
-    .reduce((totals, record) => {
-      totals.collected += Number(record.amount || 0);
-      totals.deductions += Number(record.deductionTotal || 0);
-      return totals;
-    }, { collected: 0, deductions: 0 });
+  const totals = collectionsData.filter(record => record.cycleId === currentCycleId && record.customer === customerName && liveCommitmentIds.has(record.commitmentId) && !collectionAlreadyInCsv(record))
+    .reduce((acc, record) => {
+      acc.collected += recordCashAmount(record);
+      acc.tdsTcs += recordTdsTcs(record);
+      acc.settlements += recordSettlementValue(record);
+      return acc;
+    }, { collected: 0, tdsTcs: 0, settlements: 0 });
+  // "deductions" = every non-cash amount that reduces what the customer owes
+  // (TDS/TCS + approved settlements); callers net it off the outstanding.
+  totals.deductions = totals.tdsTcs + totals.settlements;
+  return totals;
 }
 
 async function saveCustomerAssignment(customerName, select) {
@@ -1933,22 +2030,33 @@ function updateSummary() {
   // Collected for the current calendar month (collectionDate falls within this month).
   // Records carried into this cycle from an earlier month (partially collected
   // commitments) keep their original date and are deliberately NOT counted here.
-  const collectedThisMonth = collectionsData.filter(record => visibleNames.has(record.customer) && record.collectionDate && record.collectionDate >= monthStartStr && record.collectionDate < monthEndStr).reduce((s, record) => s + Number(record.amount || 0), 0);
+  // Collections = cash + TDS + TCS. Settlements (LD / Other, approved only) are
+  // NOT collections: they are reported on their own tile and never count towards
+  // collection performance. Both reduce the gap against what was committed.
+  const monthRecords = collectionsData.filter(record => visibleNames.has(record.customer) && record.collectionDate && record.collectionDate >= monthStartStr && record.collectionDate < monthEndStr);
+  const cashThisMonth = monthRecords.reduce((sum, record) => sum + recordCashAmount(record), 0);
+  const tdsTcsThisMonth = monthRecords.reduce((sum, record) => sum + recordTdsTcs(record), 0);
+  const collectedThisMonth = cashThisMonth + tdsTcsThisMonth;
+  const settledThisMonth = monthRecords.reduce((sum, record) => sum + recordSettlementValue(record), 0);
+  const pendingSettlementCount = collectionsData.filter(record => visibleNames.has(record.customer) && recordPendingSettlement(record) > 0).length;
 
   // "Collections till date" = month-to-date, on the same basis as the
   // committed-this-month figure it is compared against below.
   const collectedTillDate = collectedThisMonth;
   const collectedPct = committedThisMonth > 0 ? (collectedTillDate / committedThisMonth) * 100 : 0;
 
-  // Gap = Monthly Committed - Monthly Collected.
-  // Positive = shortfall against what was committed this month (deficit, red).
-  // Zero or negative = this month's collections have met or exceeded this month's commitments (surplus, green).
-  const gap = committedThisMonth - collectedThisMonth;
+  // Gap = Monthly Committed - (Monthly Collected + Monthly Settled).
+  // Positive = shortfall (deficit, red). Zero or negative = met or exceeded (green).
+  const gap = committedThisMonth - collectedThisMonth - settledThisMonth;
 
   document.getElementById('statOutstanding').textContent = formatDebtAmount(totalOut);
   document.getElementById('statCommitted').textContent = formatDebtAmount(totalCommit);
   document.getElementById('statCommittedMonth').textContent = formatDebtAmount(committedThisMonth);
-  document.getElementById('statCollectedTillDate').textContent = formatDebtAmount(collectedTillDate);
+  const collectedEl = document.getElementById('statCollectedTillDate');
+  collectedEl.textContent = formatDebtAmount(collectedTillDate);
+  collectedEl.title = `Cash received ${formatDebtAmount(cashThisMonth)} + TDS/TCS ${formatDebtAmount(tdsTcsThisMonth)}. Settlements are not included.`;
+  document.getElementById('statSettled').textContent = formatDebtAmount(settledThisMonth);
+  document.getElementById('statSettledPending').textContent = pendingSettlementCount ? `(${pendingSettlementCount} pending approval)` : '';
   document.getElementById('statCollectedTillDatePct').textContent = `(${collectedPct.toFixed(1)}%)`;
   const gapEl = document.getElementById('statGap');
   const gapIconEl = document.getElementById('statGapIcon');
@@ -1969,9 +2077,12 @@ function updateSummary() {
     const committed = commitments.reduce((s, c) => s + c.amount, 0);
     const commitmentIds = new Set(commitments.map(commitment => commitment.id));
     const records = collectionsData.filter(record => record.cycleId === currentCycleId && commitmentIds.has(record.commitmentId));
-    const collected = records.reduce((sum, record) => sum + Number(record.amount || 0), 0);
-    const deductions = records.reduce((sum, record) => sum + Number(record.deductionTotal || 0), 0);
-    const settled = collected + deductions;
+    const cashCollected = records.reduce((sum, record) => sum + recordCashAmount(record), 0);
+    const tdsTcs = records.reduce((sum, record) => sum + recordTdsTcs(record), 0);
+    const settlementsApproved = records.reduce((sum, record) => sum + recordSettlementValue(record), 0);
+    const pendingSettle = records.reduce((sum, record) => sum + recordPendingSettlement(record), 0);
+    const collected = cashCollected + tdsTcs;            // collection credit (cash + TDS/TCS)
+    const settled = collected + settlementsApproved;     // what is no longer owed
     const netOutstanding = Math.max(0, Number(customer.outstanding || 0) - settled);
     const assignedText = responsibleTextForCustomer(customer.customerName);
     
@@ -1986,7 +2097,10 @@ function updateSummary() {
     } else if (committed > 0) {
       if (settled >= committed) {
         status = 'success';
-        statusText = '✓ Collected';
+        statusText = (settlementsApproved > 0 && collected === 0) ? '✓ Settled' : '✓ Collected';
+      } else if (pendingSettle > 0) {
+        status = 'warning';
+        statusText = 'Settlement Pending';
       } else if (settled > 0) {
         status = 'warning';
         statusText = `Partial (₹${settled.toLocaleString('en-IN')})`;
@@ -2024,10 +2138,10 @@ function updateSummary() {
         <td style="text-align:right">${formatDebtAmount(customer.billed)}</td>
         <td style="text-align:right">${formatDebtAmount(customer.collected)}</td>
         <td style="text-align:right; color:${Number(customer.outstanding||0) < 0 ? '#B71C1C' : 'inherit'}">${formatDebtAmount(customer.outstanding)}</td>
-        <td style="text-align:right;font-weight:700;color:${netOutstanding < Number(customer.outstanding || 0) ? '#3F704D' : 'inherit'}">${formatDebtAmount(netOutstanding)}${deductions?`<div style="font-size:9px;color:var(--t2)">incl. ${formatDebtAmount(deductions)} deductions</div>`:''}</td>
+        <td style="text-align:right;font-weight:700;color:${netOutstanding < Number(customer.outstanding || 0) ? '#3F704D' : 'inherit'}">${formatDebtAmount(netOutstanding)}${(tdsTcs || settlementsApproved)?`<div style="font-size:9px;color:var(--t2)">incl. ${tdsTcs?formatDebtAmount(tdsTcs)+' TDS/TCS':''}${tdsTcs && settlementsApproved?' + ':''}${settlementsApproved?formatDebtAmount(settlementsApproved)+' settled':''}</div>`:''}</td>
         <td style="text-align: right;">${formatDebtAmount(allocated)}</td>
         <td style="text-align: right;">${formatDebtAmount(committed)}</td>
-        <td style="text-align: right;">${formatDebtAmount(collected)}</td>
+        <td style="text-align: right;">${formatDebtAmount(collected)}${settlementsApproved?`<div style="font-size:9px;color:#6A1B9A">+ ${formatDebtAmount(settlementsApproved)} settled</div>`:''}${pendingSettle?`<div style="font-size:9px;color:#E65100">⏳ ${formatDebtAmount(pendingSettle)} awaiting approval</div>`:''}</td>
         <td><span class="badge ${status}">${statusText}</span></td>
         <td>${renderCustomerAssignmentCell(customer.customerName)}</td>
       </tr>
@@ -2070,6 +2184,37 @@ function netOutstandingValue(outstanding, settledAmount) {
   if (raw < 0) return raw;
   return Math.max(0, raw - Number(settledAmount || 0));
 }
+// Single source of truth for a commitment's status label.
+function commitmentDisplayStatus(commitment) {
+  const amount = Number(commitment.amount || 0);
+  const collected = Number(commitment.collected || 0);
+  const tdsTcs = Number(commitment.deductions || 0);
+  const settlements = Number(commitment.settlements || 0);
+  const settled = Number(commitment.settled || (collected + tdsTcs + settlements));
+  const today = new Date().toISOString().split('T')[0];
+  if (settled < amount && commitment.needsRevisedDate) return 'Revise Date';
+  if (settled >= amount) return (settlements > 0 && collected + tdsTcs === 0) ? 'Settled' : 'Collected';
+  if (Number(commitment.pendingSettlement || 0) > 0) return 'Settlement Pending';
+  if (settled > 0) return 'Partial';
+  if (today > commitment.commitDate) return 'Delayed';
+  return 'Committed';
+}
+
+// Small status lines for settlements that are not (yet) in effect.
+function settlementNotesHtml(commitment) {
+  return collectionsData
+    .filter(record => record.commitmentId === commitment.id && isSettlementRecord(record) && record.approvalStatus !== 'approved')
+    .map(record => {
+      const amt = settlementRawTotal(record).toLocaleString('en-IN');
+      if (record.approvalStatus === 'rejected') {
+        const rejection = (record.approvals || []).find(item => item.decision === 'rejected');
+        return `<div style="font-size:10px;color:#B71C1C;margin-top:5px">✕ Settlement ₹${amt} rejected${rejection ? ` by ${escapeDebtHtml(rejection.byName || rejection.by)}: "${escapeDebtHtml(rejection.note || '')}"` : ''}</div>`;
+      }
+      const who = debtDisplayName(SETTLEMENT_APPROVAL_STEPS[record.approvalStatus]);
+      return `<div style="font-size:10px;color:#6A1B9A;margin-top:5px">⏳ Settlement ₹${amt} awaiting ${escapeDebtHtml(who)}'s approval</div>`;
+    }).join('');
+}
+
 function updateCommitments() {
   const tbody = document.getElementById('commitmentsTable');
   const customers = visibleDebtCustomers();
@@ -2090,20 +2235,21 @@ function updateCommitments() {
       const remaining = Math.max(0, amount - settled);
       const today = new Date().toISOString().split('T')[0];
       const needsRevisedDate = settled < amount && !!commitment.needsRevisedDate;
-      const status = needsRevisedDate ? 'Revise Date' : settled >= amount ? 'Collected' : settled > 0 ? 'Partial' : today > commitment.commitDate ? 'Delayed' : 'Committed';
-      const statusClass = status === 'Revise Date' || status === 'Delayed' ? 'error' : status === 'Partial' ? 'warning' : 'success';
+      const status = commitmentDisplayStatus(commitment);
+      const statusClass = status === 'Revise Date' || status === 'Delayed' ? 'error' : (status === 'Partial' || status === 'Settlement Pending') ? 'warning' : 'success';
       const revisedDateNote = needsRevisedDate ? `<div style="font-size:11px;color:#E65100;font-weight:600;margin-top:6px">🔄 Carried forward from last upload - not yet collected. Please revise the commitment date.</div>` : '';
       const recordButton = remaining > 0 ? `<button class="btn sm primary" onclick="openCollectionModal('${commitment.id}')"><i class="ti ti-cash"></i> Record Collection</button>` : '';
       const reviseButton = remaining > 0 && canReviseCommitment(commitment) ? `<button class="btn sm" onclick="openReviseCommitmentModal('${commitment.id}')" style="color:#E65100;border-color:#FFCC80"><i class="ti ti-calendar-time"></i> Revise & Justify</button>` : '';
       const manageButtons = canManageCommitments() ? `<button class="btn sm" onclick="openCommitmentModal('${commitment.allocationId}')"><i class="ti ti-edit"></i> Edit</button><button class="btn sm" onclick="deleteCommitment('${commitment.id}')" style="color:#c00;border-color:#ffcdd2"><i class="ti ti-trash"></i></button>` : '';
       return `<div class="commitment-entry"${needsRevisedDate ? ' style="border-color:#FFCC80;background:#FFF8E1"' : ''}>
         <div class="commitment-entry-head"><div class="commitment-entry-title">${escapeDebtHtml(allocation.project || 'Project')}<div style="font-weight:500;color:var(--t2);margin-top:2px">PO: ${escapeDebtHtml(allocation.po || '—')}</div></div><span class="badge ${statusClass}">${status}</span></div>
-        ${revisedDateNote}
+        ${revisedDateNote}${settlementNotesHtml(commitment)}
         <div class="commitment-entry-grid">
           <div><span>Committed</span><b>₹${amount.toLocaleString('en-IN')}</b></div>
           <div><span>Commitment Date</span><b>${commitment.commitDate ? new Date(commitment.commitDate).toLocaleDateString('en-IN') : '—'}</b></div>
           <div><span>Collected</span><b>₹${collected.toLocaleString('en-IN')}</b></div>
-          <div><span>Deductions</span><b>₹${deductions.toLocaleString('en-IN')}</b></div>
+          <div><span>TDS / TCS</span><b>₹${deductions.toLocaleString('en-IN')}</b></div>
+          <div><span>Settled (non-cash)</span><b style="color:#6A1B9A">₹${Number(commitment.settlements || 0).toLocaleString('en-IN')}</b></div>
           <div><span>Remaining</span><b style="color:${remaining ? 'var(--p)' : '#1B5E20'}">₹${remaining.toLocaleString('en-IN')}</b></div>
           <div><span>Responsible</span><b>${escapeDebtHtml(commitment.assignedTo || commitment.assignedUsername || '—')}</b></div>
         </div>
@@ -2137,8 +2283,8 @@ function updateCommitments() {
       const remaining = Math.max(0, amount - settled);
       const today = new Date().toISOString().split('T')[0];
       const needsRevisedDate = settled < amount && !!commitment.needsRevisedDate;
-      const statusText = needsRevisedDate ? 'Revise Date' : settled >= amount ? 'Collected' : settled > 0 ? 'Partial' : today > commitment.commitDate ? 'Delayed' : 'Committed';
-      const statusClass = statusText === 'Revise Date' || statusText === 'Delayed' ? 'error' : statusText === 'Partial' ? 'warning' : 'success';
+      const statusText = commitmentDisplayStatus(commitment);
+      const statusClass = statusText === 'Revise Date' || statusText === 'Delayed' ? 'error' : (statusText === 'Partial' || statusText === 'Settlement Pending') ? 'warning' : 'success';
       const responsibleText = responsibleTextForCustomer(customer.customerName, commitment);
       if (!commitmentRowMatchesFilters({
         customer: customer.customerName,
@@ -2158,9 +2304,9 @@ function updateCommitments() {
         <td style="text-align:right;font-weight:700">₹${amount.toLocaleString('en-IN')}</td>
         <td style="white-space:nowrap${needsRevisedDate ? ';color:#E65100;font-weight:700' : ''}">${commitment.commitDate ? new Date(commitment.commitDate).toLocaleDateString('en-IN') : '—'}${needsRevisedDate ? ' 🔄' : ''}</td>
         <td style="text-align:right;color:#2E7D32">₹${collected.toLocaleString('en-IN')}</td>
-        <td style="text-align:right;color:#E65100">₹${deductions.toLocaleString('en-IN')}</td>
+        <td style="text-align:right;color:#E65100">₹${deductions.toLocaleString('en-IN')}${Number(commitment.settlements || 0) > 0 ? `<div style="font-size:9px;color:#6A1B9A">+ ₹${Number(commitment.settlements || 0).toLocaleString('en-IN')} settled</div>` : ''}</td>
         <td style="text-align:right;font-weight:700;color:${remaining ? 'var(--p)' : '#2E7D32'}">₹${remaining.toLocaleString('en-IN')}</td>
-        <td><span class="badge ${statusClass}">${statusText}</span></td>
+        <td><span class="badge ${statusClass}">${statusText}</span>${settlementNotesHtml(commitment)}</td>
         <td>${escapeDebtHtml(responsibleText)}</td>
         <td><div style="display:flex;gap:5px;flex-wrap:wrap;min-width:190px">${recordButton}${reviseButton}${linkButton}${manageButtons}</div></td>
       </tr>`;
@@ -2282,10 +2428,11 @@ function updateLeaderboard() {
   commitmentsData.forEach(c => {
     const key = c.assignedUsername || c.assignedTo;
     if (!key) return;
-    if (!stats[key]) stats[key] = { name: c.assignedTo || key, count: 0, committed: 0, collected: 0 };
+    if (!stats[key]) stats[key] = { name: c.assignedTo || key, count: 0, committed: 0, collected: 0, settled: 0 };
     stats[key].count++;
     stats[key].committed += c.amount;
-    stats[key].collected += c.collected || 0;
+    stats[key].collected += Number(c.collected || 0) + Number(c.deductions || 0); // cash + TDS/TCS only
+    stats[key].settled += Number(c.settlements || 0);                              // approved settlements, shown separately
   });
   
   const sorted = Object.values(stats).filter(s => s.count > 0).sort((a, b) => b.collected - a.collected);
@@ -2311,7 +2458,7 @@ function updateLeaderboard() {
         <div class="leaderboard-rank">${medal}</div>
         <div class="leaderboard-user">
           <div class="leaderboard-name">#${idx + 1} ${user.name}</div>
-          <div style="font-size: 11px; color: var(--t2);">Collection Performance: ${perf}% (Collected ÷ Committed)</div>
+          <div style="font-size: 11px; color: var(--t2);">Collection Performance: ${perf}% (Collections incl. TDS/TCS ÷ Committed · settlements excluded)</div>
         </div>
         <div class="leaderboard-stats">
           <div class="stat-item">
@@ -2324,7 +2471,11 @@ function updateLeaderboard() {
           </div>
           <div class="stat-item">
             <div class="stat-item-label">Collected</div>
-            <div class="stat-item-value" style="color: #3F704D;">₹${(user.collected/100000).toFixed(1)}L</div>
+            <div class="stat-item-value" style="color: #3F704D;">${leaderboardAmount(user.collected)}</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-item-label">Settled</div>
+            <div class="stat-item-value" style="color: #6A1B9A;">${leaderboardAmount(user.settled)}</div>
           </div>
         </div>
       </div>
@@ -2951,8 +3102,8 @@ function addDeductionRow() {
   const container = document.getElementById('deductionRows');
   const row = document.createElement('div');
   row.className = 'deduction-row';
-  row.style.cssText = 'display:grid;grid-template-columns:105px 1fr 1.4fr auto;gap:6px;margin-bottom:6px;align-items:center';
-  row.innerHTML = `<select class="deduction-type"><option>TDS</option><option>TCS</option><option>LD</option><option>Other</option></select><input class="deduction-amount" type="number" min="0" step="0.01" placeholder="Amount"><input class="deduction-remarks" type="text" placeholder="Remarks"><button type="button" class="btn sm" onclick="this.closest('.deduction-row').remove()">✕</button>`;
+  row.style.cssText = 'display:grid;grid-template-columns:140px 1fr 1.4fr auto;gap:6px;margin-bottom:6px;align-items:center';
+  row.innerHTML = `<select class="deduction-type"><option value="TDS">TDS (collection)</option><option value="TCS">TCS (collection)</option><option value="LD">LD (settlement)</option><option value="Other">Other (settlement)</option></select><input class="deduction-amount" type="number" min="0" step="0.01" placeholder="Amount"><input class="deduction-remarks" type="text" placeholder="Remarks"><button type="button" class="btn sm" onclick="this.closest('.deduction-row').remove()">✕</button>`;
   container.appendChild(row);
 }
 
@@ -2962,7 +3113,7 @@ function readDeductions() {
     amount: Number(row.querySelector('.deduction-amount').value || 0),
     remarks: row.querySelector('.deduction-remarks').value.trim()
   })).filter(item => item.amount > 0);
-  if (deductions.some(item => item.type === 'Other' && !item.remarks)) throw new Error('Remarks are required for Other deductions');
+  if (deductions.some(item => !COLLECTION_DEDUCTION_TYPES.includes(item.type) && !item.remarks)) throw new Error('Remarks are required for LD and Other settlements');
   return deductions;
 }
 
@@ -2971,58 +3122,172 @@ async function saveCollection() {
   const collectionDate = document.getElementById('collectionDateInput').value;
   let deductions;
   try { deductions = readDeductions(); } catch (error) { showToast(error.message, 'error'); return; }
-  const deductionTotal = deductions.reduce((sum, item) => sum + item.amount, 0);
-  
+  const collectionDeductions = deductions.filter(item => COLLECTION_DEDUCTION_TYPES.includes(item.type));
+  const settlementDeductions = deductions.filter(item => !COLLECTION_DEDUCTION_TYPES.includes(item.type));
+  const collectionDeductionTotal = collectionDeductions.reduce((sum, item) => sum + item.amount, 0);
+  const settlementTotal = settlementDeductions.reduce((sum, item) => sum + item.amount, 0);
+  const collectionValue = collectedAmt + collectionDeductionTotal;
+
   if (!collectionDate) {
     showToast('Please enter collection date', 'error');
     return;
   }
-  
+
   const commit = commitmentsData.find(c => c.id === currentCommitmentId);
   if (!commit) return;
-  
-  if (collectedAmt + deductionTotal <= 0) {
+
+  if (collectionValue + settlementTotal <= 0) {
     showToast('Enter a collection amount or at least one deduction', 'error');
     return;
   }
-  const remaining = Math.max(0, Number(commit.amount || 0) - Number(commit.settled || 0));
-  if (collectedAmt + deductionTotal > remaining) {
-    showToast(`Collection plus deductions cannot exceed the remaining committed amount of ₹${remaining.toLocaleString('en-IN')}`, 'error');
+  // Settlements still awaiting approval are held against the commitment so the
+  // same amount cannot be settled or collected twice while approval is pending.
+  const remaining = Math.max(0, Number(commit.amount || 0) - Number(commit.settled || 0) - Number(commit.pendingSettlement || 0));
+  if (collectionValue + settlementTotal > remaining) {
+    showToast(`Collection plus settlements cannot exceed the remaining committed amount of ₹${remaining.toLocaleString('en-IN')} (amounts awaiting settlement approval are held)`, 'error');
     return;
   }
 
-  const duplicate = collectionsData.some(record => record.commitmentId === commit.id && record.collectionDate === collectionDate && Number(record.amount) === collectedAmt && Number(record.deductionTotal || 0) === deductionTotal);
-  if (duplicate) {
-    showToast('This payment appears to have already been recorded', 'error');
+  const duplicateCollection = collectionValue > 0 && collectionsData.some(record => record.commitmentId === commit.id && !isSettlementRecord(record) && record.collectionDate === collectionDate && Number(record.amount) === collectedAmt && recordCollectionValue(record) === collectionValue);
+  const duplicateSettlement = settlementTotal > 0 && collectionsData.some(record => record.commitmentId === commit.id && isSettlementRecord(record) && record.approvalStatus !== 'rejected' && record.collectionDate === collectionDate && settlementRawTotal(record) === settlementTotal);
+  if (duplicateCollection || duplicateSettlement) {
+    showToast('This entry appears to have already been recorded', 'error');
     return;
   }
 
-  const ref = db.collection(DEBT_COLLECTIONS_COLLECTION).doc();
-  const collectionRecord = {
-    id: ref.id, cycleId: currentCycleId, commitmentId: commit.id, allocationId: commit.allocationId,
-    customer: commit.customer, amount: collectedAmt, deductions, deductionTotal, collectionDate, source: 'manual',
-    recordedBy: currentUser, recordedAt: new Date()
-  };
+  const recorder = debtUsername();
+  const recordedAt = new Date();
+  const base = { cycleId: currentCycleId, commitmentId: commit.id, allocationId: commit.allocationId, customer: commit.customer, collectionDate, source: 'manual', recordedBy: currentUser, recordedAt };
+  const newRecords = [];
+  if (collectionValue > 0) {
+    const ref = db.collection(DEBT_COLLECTIONS_COLLECTION).doc();
+    newRecords.push({ ref, data: { ...base, id: ref.id, recordType: 'collection', amount: collectedAmt, deductions: collectionDeductions, deductionTotal: collectionDeductionTotal } });
+  }
+  if (settlementTotal > 0) {
+    // Approval runs Pratim first, then Updesh. If one of them is the person
+    // recording it, their own step is taken as given and only the other signs off.
+    const ref = db.collection(DEBT_COLLECTIONS_COLLECTION).doc();
+    const approvals = [];
+    let approvalStatus = 'pending_pratim';
+    if (recorder === 'pratim') {
+      approvals.push({ step: 'pratim', by: 'pratim', byName: debtDisplayName('pratim'), decision: 'approved', note: 'Recorded by approver', at: recordedAt.toISOString(), auto: true });
+      approvalStatus = 'pending_updesh';
+    }
+    newRecords.push({ ref, data: { ...base, id: ref.id, recordType: 'settlement', amount: 0, deductions: settlementDeductions, deductionTotal: 0, settlementTotal, approvalStatus, approvals } });
+  }
   try {
-    await ref.set(collectionRecord);
-    collectionsData.push(collectionRecord);
+    const batch = db.batch();
+    newRecords.forEach(item => batch.set(item.ref, item.data));
+    await batch.commit();
+    newRecords.forEach(item => collectionsData.push(item.data));
     applyCollectionLedgerTotals();
   } catch (error) {
     showToast('Could not record collection: ' + error.message, 'error');
     return;
   }
-  
+
   console.log('✅ Collection recorded:', {
     customer: commit.customer,
     committed: commit.amount,
     collected: collectedAmt,
     date: collectionDate
   });
-  
+
   saveToLocalStorage();
   closeModal('collectionModal');
   updateAllTabs();
-  showToast('✅ Collection recorded', 'success');
+  showToast(settlementTotal > 0 ? `✅ Recorded. Settlement of ₹${settlementTotal.toLocaleString('en-IN')} sent for approval (Pratim, then Updesh)` : '✅ Collection recorded', 'success');
+}
+
+// ══ Settlement approval (Pratim first, then Updesh) ══
+function pendingSettlementApprovalItems() {
+  const me = debtUsername();
+  const wanted = Object.keys(SETTLEMENT_APPROVAL_STEPS).find(status => SETTLEMENT_APPROVAL_STEPS[status] === me);
+  if (!wanted) return [];
+  return collectionsData
+    .filter(record => isSettlementRecord(record) && record.approvalStatus === wanted)
+    .map(record => {
+      const commitment = commitmentsData.find(item => item.id === record.commitmentId);
+      const allocation = allocationsData.find(item => item.id === (commitment?.allocationId || record.allocationId));
+      return { record, commitment, allocation };
+    })
+    .filter(item => item.commitment)
+    .sort((a, b) => String(a.record.collectionDate || '').localeCompare(String(b.record.collectionDate || '')));
+}
+
+function showSettlementApprovalReminder(items = pendingSettlementApprovalItems()) {
+  const list = document.getElementById('settlementApprovalList');
+  if (!list) return;
+  const me = debtUsername();
+  list.innerHTML = items.map(({ record, commitment, allocation }) => {
+    const lines = (Array.isArray(record.deductions) ? record.deductions : []).map(item =>
+      `<div>${escapeDebtHtml(item.type)}: <b>₹${Number(item.amount || 0).toLocaleString('en-IN')}</b> - ${escapeDebtHtml(item.remarks || '')}</div>`).join('');
+    const trail = (record.approvals || []).filter(item => item.decision === 'approved').map(item =>
+      `<div style="color:#2E7D32">✓ Approved by ${escapeDebtHtml(item.byName || item.by)}${item.auto ? ' (as recorder)' : ''}</div>`).join('');
+    const stepText = me === 'pratim' ? 'Step 1 of 2 (Pratim, then Updesh)' : 'Step 2 of 2 (Pratim has approved)';
+    const dateText = record.collectionDate ? new Date(record.collectionDate).toLocaleDateString('en-IN') : '—';
+    return `<div class="deadline-item" style="border-left-color:#6A1B9A;background:#F3E5F5">
+      <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">
+        <div>
+          <div style="font-weight:700">${escapeDebtHtml(record.customer)}</div>
+          <div style="font-size:10.5px;color:var(--t2);margin-top:2px">${escapeDebtHtml(allocation?.project || 'Project')} · PO: ${escapeDebtHtml(allocation?.po || '—')} · Commitment ₹${Number(commitment.amount || 0).toLocaleString('en-IN')}</div>
+        </div>
+        <span class="badge warning">₹${settlementRawTotal(record).toLocaleString('en-IN')} settlement</span>
+      </div>
+      <div style="font-size:11.5px;margin-top:8px;background:#fff;padding:6px 8px;border-radius:6px">${lines}</div>
+      <div style="font-size:10.5px;color:var(--t2);margin-top:7px">Recorded by ${escapeDebtHtml(debtDisplayName(record.recordedBy))} · Settlement date ${dateText} · ${stepText}</div>
+      <div style="font-size:10.5px;margin-top:4px">${trail}</div>
+      <textarea id="settleNote_${record.id}" rows="2" placeholder="Note (required if you reject)" style="width:100%;margin-top:8px;padding:6px 8px;border-radius:7px;border:0.5px solid var(--bds);font-family:inherit;font-size:11.5px"></textarea>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+        <button class="btn sm" style="color:#B71C1C;border-color:#ffcdd2" onclick="decideSettlement('${record.id}','rejected')">✕ Reject</button>
+        <button class="btn sm commit" onclick="decideSettlement('${record.id}','approved')">✓ Approve</button>
+      </div>
+    </div>`;
+  }).join('') || '<div style="font-size:12px;color:var(--t2);padding:8px">No settlements are awaiting your approval.</div>';
+  document.getElementById('settlementApprovalModal').classList.add('active');
+}
+
+async function decideSettlement(recordId, decision) {
+  const record = collectionsData.find(item => item.id === recordId);
+  if (!record || !isSettlementRecord(record)) return;
+  const me = debtUsername();
+  const expected = SETTLEMENT_APPROVAL_STEPS[record.approvalStatus];
+  if (!expected) { showToast('This settlement is no longer awaiting approval', 'error'); return; }
+  if (expected !== me) { showToast(`This settlement is awaiting ${debtDisplayName(expected)}'s approval`, 'error'); return; }
+  const note = (document.getElementById(`settleNote_${recordId}`)?.value || '').trim();
+  if (decision === 'rejected' && !note) { showToast('Please give a reason for rejecting', 'error'); return; }
+
+  const nowIso = new Date().toISOString();
+  const approvals = [...(Array.isArray(record.approvals) ? record.approvals : []),
+    { step: me, by: me, byName: currentUserData?.fullName || currentUserData?.displayName || currentUser, decision, note, at: nowIso }];
+  let status;
+  if (decision === 'rejected') {
+    status = 'rejected';
+  } else if (me === 'pratim') {
+    status = 'pending_updesh';
+    // Updesh recorded it himself: his step is already given, so Pratim's approval completes it.
+    if (String(record.recordedBy || '').toLowerCase() === 'updesh') {
+      approvals.push({ step: 'updesh', by: 'updesh', byName: debtDisplayName('updesh'), decision: 'approved', note: 'Recorded by approver', at: nowIso, auto: true });
+      status = 'approved';
+    }
+  } else {
+    status = 'approved';
+  }
+  const patch = { approvalStatus: status, approvals, updatedAt: new Date(), ...(status === 'approved' ? { approvedAt: nowIso } : {}) };
+  try {
+    await db.collection(DEBT_COLLECTIONS_COLLECTION).doc(recordId).set(patch, { merge: true });
+  } catch (error) {
+    showToast('Could not save the decision: ' + error.message, 'error');
+    return;
+  }
+  collectionsData = collectionsData.map(item => item.id === recordId ? { ...item, ...patch } : item);
+  applyCollectionLedgerTotals();
+  saveToLocalStorage();
+  updateAllTabs();
+  showToast(decision === 'rejected' ? 'Settlement rejected' : status === 'approved' ? '✅ Settlement approved - it now counts against the commitment' : '✅ Approved - now awaiting Updesh', 'success');
+  const remainingItems = pendingSettlementApprovalItems();
+  if (remainingItems.length) showSettlementApprovalReminder(remainingItems); else closeModal('settlementApprovalModal');
+  checkNotifications(true);
 }
 
 async function deleteCommitment(commitmentId) {
@@ -3594,6 +3859,19 @@ async function checkNotifications(useCachedInfo = false) {
     return;
   }
 
+  // Pratim / Updesh: settlements waiting for their approval (in that order).
+  const approvalItems = pendingSettlementApprovalItems();
+  if (approvalItems.length) {
+    activeNotificationType = 'settlement_approval';
+    showNotificationBadge(`${approvalItems.length} Settlement${approvalItems.length > 1 ? 's' : ''} Awaiting Approval`);
+    const reminderId = `settlement-approval:${approvalItems.map(item => item.record.id).join('|')}`;
+    if (autoShownNotificationId !== reminderId) {
+      autoShownNotificationId = reminderId;
+      showSettlementApprovalReminder(approvalItems);
+    }
+    return;
+  }
+
   const deadlineItems = pendingCommitmentDeadlineItems();
   if (deadlineItems.length) {
     activeNotificationType = 'commitment_deadline';
@@ -3682,6 +3960,8 @@ function openNotificationModal() {
     showCommitmentRevisionReminder(pendingCommitmentRevisionItems(), 'alert');
   } else if (activeNotificationType === 'commitment_revision_confirm') {
     showCommitmentRevisionReminder(pendingOwnRevisionConfirmations(), 'confirm');
+  } else if (activeNotificationType === 'settlement_approval') {
+    showSettlementApprovalReminder();
   }
 }
 
