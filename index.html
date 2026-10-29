@@ -4273,8 +4273,8 @@ function spParseCreditors(text) {
 // ══ SyProC data tabs: UI, upload and live listeners ══
 const SP_SALES_COL = 'dqap_sales_invoices', SP_SALES_META = 'dqap_sales_meta';
 const SP_CRED_COL = 'dqap_creditors_vendors', SP_CRED_META = 'dqap_creditors_meta';
-const SP_CRM_TARGETS = 'dqap_crm_targets';
-let spSales = [], spSalesMeta = null, spVendors = [], spCredMeta = null, spTargets = [];
+const SP_CRM_PLAN_COL = 'dqap_crm_lead_incentive_config';
+let spSales = [], spSalesMeta = null, spVendors = [], spCredMeta = null, spPlanCfg = null;
 let spSalesParsed = null, spCredParsed = null, spListening = false;
 const spInr = n => (n < 0 ? '-' : '') + '₹' + Math.abs(Number(n || 0)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const spLakh = n => (n < 0 ? '-' : '') + '₹' + Math.round(Math.abs(Number(n || 0))).toLocaleString('en-IN');
@@ -4287,7 +4287,7 @@ function spStartListeners() {
   if (spListening) return; spListening = true;
   db.collection(SP_SALES_COL).onSnapshot(sn => { spSales = sn.docs.map(d => d.data()); spRenderSales(); }, () => {});
   db.collection(SP_SALES_META).doc('latest').onSnapshot(d => { spSalesMeta = d.exists ? d.data() : null; spRenderSales(); }, () => {});
-  db.collection(SP_CRM_TARGETS).get().then(sn => { spTargets = sn.docs.map(d => d.data()).filter(t => t.targetType === 'annual-plan'); spRenderSales(); }).catch(() => {});
+  db.collection(SP_CRM_PLAN_COL).doc('current').onSnapshot(d => { spPlanCfg = d.exists ? d.data() : null; spRenderSales(); }, () => {});
   if (spCanCreditors()) {
     db.collection(SP_CRED_COL).onSnapshot(sn => { spVendors = sn.docs.map(d => ({ id: d.id, ...d.data() })); spRenderCreditors(); }, () => {});
     db.collection(SP_CRED_META).doc('latest').onSnapshot(d => { spCredMeta = d.exists ? d.data() : null; spRenderCreditors(); }, () => {});
@@ -4337,13 +4337,18 @@ async function spImportSales() {
 }
 function spFyOptions() { const s = new Set(spSales.map(v => v.fy)); return [...s].sort().reverse(); }
 function spTargetFor(fy, quarter) {
-  // CRM targets are stored per calendar year with calendar quarters q1..q4 (Jan-Mar = q1). FY 2026-27 = q2..q4 of 2026 plus q1 of 2027.
-  const y = parseInt(String(fy).slice(0, 4), 10); if (!y || !spTargets.length) return null;
-  const part = (year, q) => spTargets.filter(t => Number(t.year) === year).reduce((a, t) => a + Number(((t.quarterTargets || {})['q' + q] || {}).billing || 0), 0);
-  const map = { 1: [[y, 2]], 2: [[y, 3]], 3: [[y, 4]], 4: [[y + 1, 1]] };
-  const list = quarter ? map[quarter] : [[y, 2], [y, 3], [y, 4], [y + 1, 1]];
-  const t = list.reduce((a, [yy, q]) => a + part(yy, q), 0);
-  return t > 0 ? t : null;
+  // Same source as the Sales CRM Targets page: the FY 2026-27 sales plan (company billing target) with
+  // quarter weights, optionally overridden in dqap_crm_lead_incentive_config/current (salesPlanOverrides).
+  const plan = spPlan(); if (!plan || plan.fy !== fy) return null;
+  const total = Number((plan.company || {}).billing || 0); if (!(total > 0)) return null;
+  if (!quarter) return total;
+  const w = Number((plan.quarterWeights || {})['q' + quarter] || 0);
+  return w > 0 ? total * w : null;
+}
+function spPlan() {
+  const base = { fy: '2026-27', company: { billing: 120000000 }, quarterWeights: { q1: 0.20, q2: 0.30, q3: 0.20, q4: 0.30 } };
+  const o = (spPlanCfg && spPlanCfg.salesPlanOverrides) || {};
+  return { fy: base.fy, company: o.company || base.company, quarterWeights: o.quarterWeights || base.quarterWeights };
 }
 function spRenderSales() {
   const host = document.getElementById('spSalesBody'); if (!host) return;
@@ -4361,7 +4366,7 @@ function spRenderSales() {
   const basic = sum('basic'), qBasic = inQ.filter(v => !v.cancelled).reduce((a, v) => a + v.basic, 0);
   const target = spTargetFor(fy, q);
   let perf = target ? '<div class="stat"><div class="stat-label">Company billing target' + (q ? ' (Q' + q + ')' : ' (year)') + '</div><div class="stat-value">' + spLakh(target) + '</div><div style="font-size:11px;color:var(--t2);margin-top:4px">Invoiced ' + Math.round(qBasic / target * 100) + '% of target (basic value, all customers)</div></div>'
-    : '<div class="stat"><div class="stat-label">Company billing target</div><div class="stat-value">-</div><div style="font-size:11px;color:var(--t2);margin-top:4px">No CRM annual plan found for this year</div></div>';
+    : '<div class="stat"><div class="stat-label">Company billing target</div><div class="stat-value">-</div><div style="font-size:11px;color:var(--t2);margin-top:4px">No sales plan for this financial year</div></div>';
   const meta = spSalesMeta ? 'Last upload: ' + spEsc(spStamp(spSalesMeta.uploadedAt)) + ' by ' + spEsc(spSalesMeta.uploadedBy) + ' &middot; ' + spEsc(spSalesMeta.period || '') : 'No sales register uploaded yet';
   document.getElementById('spSalesMeta').innerHTML = meta;
   host.innerHTML = '<div class="stats"><div class="stat"><div class="stat-label">Invoiced, basic value</div><div class="stat-value">' + spLakh(basic) + '</div></div><div class="stat"><div class="stat-label">Total with GST</div><div class="stat-value">' + spLakh(sum('total')) + '</div></div><div class="stat"><div class="stat-label">Invoices</div><div class="stat-value">' + live.length + '</div></div>' + perf + '</div>' +
