@@ -4277,7 +4277,7 @@ const SP_CRM_TARGETS = 'dqap_crm_targets';
 let spSales = [], spSalesMeta = null, spVendors = [], spCredMeta = null, spTargets = [];
 let spSalesParsed = null, spCredParsed = null, spListening = false;
 const spInr = n => (n < 0 ? '-' : '') + '₹' + Math.abs(Number(n || 0)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const spLakh = n => '₹' + (Number(n || 0) / 100000).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' L';
+const spLakh = n => (n < 0 ? '-' : '') + '₹' + Math.round(Math.abs(Number(n || 0))).toLocaleString('en-IN');
 const spEsc = v => escapeDebtHtml(v == null ? '' : v);
 function spCanCreditors() { return ['dev', 'updesh', 'pratim'].includes(debtUsername()); }
 function spCanPlan() { return ['updesh', 'pratim'].includes(debtUsername()); }
