@@ -531,6 +531,8 @@
     <button class="tab-btn" data-tab="summary" onclick="switchTab('summary', this)">📊 Summary</button>
     <button class="tab-btn" data-tab="commitments" data-debt-operator onclick="switchTab('commitments', this)">📅 Commitments</button>
     <button class="tab-btn" data-tab="leaderboard" data-debt-operator onclick="switchTab('leaderboard', this)">🏆 Leaderboard</button>
+    <button class="tab-btn" data-tab="salestd" onclick="switchTab('salestd', this)">🧾 SalesTD</button>
+    <button class="tab-btn" data-tab="creditors" onclick="switchTab('creditors', this)">🏦 Creditors</button>
   </div>
   
   <!-- Upload Tab -->
@@ -569,6 +571,37 @@
     </div>
   </div>
   
+  <!-- SalesTD Tab -->
+  <div id="salestd" class="tab-content">
+    <div class="card" id="spSalesUpload">
+      <h3>🧾 Upload Tally Sales Register (CSV, once a month)</h3>
+      <div style="margin-top:12px"><input type="file" id="spSalesFile" accept=".csv" onchange="spSalesFile(event)">
+        <button class="btn primary" id="spSalesImportBtn" style="display:none;margin-left:10px" onclick="spImportSales()">Import</button></div>
+      <div id="spSalesCheck"></div>
+    </div>
+    <div id="spSalesMeta" style="margin-bottom:14px;padding:10px 12px;background:#E4F1FA;border-left:4px solid var(--p);border-radius:6px;font-size:11px;color:var(--t2)"></div>
+    <div class="table-tools" style="gap:8px;flex-wrap:wrap">
+      <select id="spFy" onchange="spRenderSales()"></select>
+      <select id="spQ" onchange="spRenderSales()"><option value="0">Full year</option><option value="1">Q1 Apr-Jun</option><option value="2">Q2 Jul-Sep</option><option value="3">Q3 Oct-Dec</option><option value="4">Q4 Jan-Mar</option></select>
+      <select id="spM" onchange="spRenderSales()"></select>
+      <input class="search" type="text" id="spCust" placeholder="Search customer or invoice no..." oninput="spRenderSales()">
+    </div>
+    <div id="spSalesBody"></div>
+  </div>
+
+  <!-- Creditors Tab -->
+  <div id="creditors" class="tab-content">
+    <div class="card" id="spCredUpload">
+      <h3>🏦 Upload Tally Sundry Creditors (CSV, once a month)</h3>
+      <div style="margin-top:12px"><input type="file" id="spCredFile" accept=".csv" onchange="spCredFile(event)">
+        <button class="btn primary" id="spCredImportBtn" style="display:none;margin-left:10px" onclick="spImportCreditors()">Import</button></div>
+      <div id="spCredCheck"></div>
+    </div>
+    <div id="spCredMeta" style="margin-bottom:14px;padding:10px 12px;background:#E4F1FA;border-left:4px solid var(--p);border-radius:6px;font-size:11px;color:var(--t2)"></div>
+    <div class="table-tools"><input class="search" type="text" id="spVend" placeholder="Search vendor..." oninput="spRenderCreditors()"></div>
+    <div id="spCredBody"></div>
+  </div>
+
   <!-- Summary Tab -->
   <div id="summary" class="tab-content">
     <div class="stats">
@@ -1168,7 +1201,7 @@ let debtFilterState = {
 };
 const COMMITMENT_DEADLINE_DAYS = 3;
 const COMMITMENT_DEADLINE_SNOOZE_HOURS = 6;
-const DEBT_BUILD = '20261011.1';
+const DEBT_BUILD = '20261029.1';
 
 // ══ WIKI-INTEGRATED AUTHENTICATION ══
 // Check for Wiki session or fallback to standalone mode
@@ -2030,6 +2063,7 @@ function updateAllTabs() {
   updateLinking();
   updateCommitments();
   updateLeaderboard();
+  spShowUploadBlocks(); spRenderSales(); spRenderCreditors();
 }
 
 function updateCSVPreview() {
@@ -3525,6 +3559,8 @@ function canEditAllCommitments() {
 function getAllowedDebtTabs() {
   const allowed = new Set(['summary', 'commitments', 'leaderboard']);
   if (canUploadCSV()) allowed.add('upload');
+  allowed.add('salestd');
+  if (spCanCreditors()) allowed.add('creditors');
   return allowed;
 }
 
@@ -3538,6 +3574,7 @@ function applyDebtPermissions() {
   const realignBtn = document.getElementById('realignOwnersBtn');
   if (realignBtn) realignBtn.style.display = canManageCommitments() ? 'inline-flex' : 'none';
 
+  spStartListeners();
   // dev starts on Upload; everyone else starts on the universally visible Summary.
   switchTab(canUploadCSV() ? 'upload' : 'summary');
 }
@@ -4093,6 +4130,320 @@ document.addEventListener('DOMContentLoaded', function() {
     initializeAuth();
   }
 });
+// ══ SyProC data tabs: SalesTD and Creditors (parsing core) ══
+function spCsvRows(text) {
+  const rows = []; let row = [], cell = '', q = false;
+  text = String(text || '').replace(/^﻿/, '');
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) {
+      if (c === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; }
+      else cell += c;
+    } else if (c === '"') q = true;
+    else if (c === ',') { row.push(cell); cell = ''; }
+    else if (c === '\n' || c === '\r') {
+      if (c === '\r' && text[i + 1] === '\n') i++;
+      row.push(cell); rows.push(row); row = []; cell = '';
+    } else cell += c;
+  }
+  if (cell !== '' || row.length) { row.push(cell); rows.push(row); }
+  return rows;
+}
+// Default rule: line breaks and repeated spaces inside a name are dropped, ends trimmed.
+function spCleanName(v) { return String(v == null ? '' : v).replace(/\s+/g, ' ').trim(); }
+function spKey(v) { return spCleanName(v).toLowerCase(); }
+function spDocId(v) { return spKey(v).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 140) || 'unnamed'; }
+// Tally amount: "1234.50", "1234.50 Dr", "1234.50 Cr". Returns signed {n, side}; n is always the magnitude.
+function spAmt(s) {
+  s = String(s == null ? '' : s).replace(/,/g, '').trim();
+  if (!s) return { n: 0, side: '' };
+  const m = s.match(/^(-?[\d.]+)\s*(Dr|Cr)?$/i);
+  if (!m) return { n: NaN, side: '' };
+  return { n: Math.abs(parseFloat(m[1])), side: (m[2] || '').toLowerCase() };
+}
+function spNum(s) { return spAmt(s).n || 0; }
+function spRound2(n) { return Math.round((n + Number.EPSILON) * 100) / 100; }
+const SP_MON = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+function spParseDate(s) {
+  const m = String(s || '').trim().match(/^(\d{1,2})-([A-Za-z]{3})-(\d{2,4})$/);
+  if (!m) return null;
+  let y = parseInt(m[3], 10); if (y < 100) y += 2000;
+  const mo = SP_MON[m[2].toLowerCase()]; if (mo === undefined) return null;
+  return { y, mo, d: parseInt(m[1], 10) };
+}
+function spFy(y, mo) { const s = mo >= 3 ? y : y - 1; return s + '-' + String(s + 1).slice(2); }
+function spFyQuarter(mo) { return Math.floor(((mo + 9) % 12) / 3) + 1; } // Apr-Jun = 1
+
+function spParseSales(text) {
+  const rows = spCsvRows(text);
+  const hi = rows.findIndex(r => spCleanName(r[0]).toLowerCase() === 'date' && /particulars/i.test(r[1] || ''));
+  if (hi < 0) return { ok: false, errors: ['Heading row (Date, Particulars, ...) not found. Is this the Tally Sales Register?'] };
+  const head = rows[hi].map(spCleanName);
+  const col = (re) => head.findIndex(h => re.test(h));
+  const cValue = col(/^value$/i), cGross = col(/^gross total$/i), cVno = col(/^voucher no/i);
+  if (cValue < 0 || cGross < 0 || cVno < 0) return { ok: false, errors: ['Columns Value, Gross Total and Voucher No. are required.'] };
+  const kinds = {}; // column index -> igst|cgst|sgst|round|other|sales
+  for (let i = cGross + 1; i < head.length; i++) {
+    const h = head[i];
+    if (/^output\s+igst/i.test(h)) kinds[i] = 'igst';
+    else if (/^output\s+cgst/i.test(h)) kinds[i] = 'cgst';
+    else if (/^output\s+sgst/i.test(h)) kinds[i] = 'sgst';
+    else if (/round/i.test(h)) kinds[i] = 'round';
+    else if (/^sales/i.test(h)) kinds[i] = 'sales';
+    else if (h) kinds[i] = 'other';
+  }
+  const invoices = [], errors = [], warnings = []; let grand = null;
+  for (let r = hi + 1; r < rows.length; r++) {
+    const row = rows[r]; if (!row || row.every(c => !spCleanName(c))) continue;
+    if (/^grand total$/i.test(spCleanName(row[1])) || /^grand total$/i.test(spCleanName(row[0]))) { grand = row; continue; }
+    const dt = spParseDate(row[0]);
+    if (!dt) { errors.push('Row ' + (r + 1) + ': date "' + spCleanName(row[0]) + '" not understood'); continue; }
+    const customer = spCleanName(row[1]), vno = spCleanName(row[cVno]);
+    const cancelled = /cancel/i.test(customer) || (!spCleanName(row[cValue]) && !spCleanName(row[cGross]));
+    const o = { igst: 0, cgst: 0, sgst: 0, round: 0, other: 0, sales: 0 };
+    Object.keys(kinds).forEach(i => { o[kinds[i]] += spNum(row[i]); });
+    const basic = spNum(row[cValue]), total = spNum(row[cGross]);
+    const calc = basic + o.igst + o.cgst + o.sgst + o.round + o.other;
+    const diff = spRound2(total - calc);
+    if (!cancelled && Math.abs(diff) > 1) errors.push('Invoice ' + vno + ': basic + taxes + other = ' + spRound2(calc) + ' but Gross Total is ' + total + ' (difference ' + diff + ')');
+    else if (!cancelled && Math.abs(diff) >= 0.5) warnings.push('Invoice ' + vno + ': rounding difference of ' + diff);
+    const iso = dt.y + '-' + String(dt.mo + 1).padStart(2, '0') + '-' + String(dt.d).padStart(2, '0');
+    invoices.push({
+      voucherNo: vno, date: iso, fy: spFy(dt.y, dt.mo), fyQuarter: spFyQuarter(dt.mo), month: dt.y + '-' + String(dt.mo + 1).padStart(2, '0'),
+      series: /^S/i.test(vno) ? 'S' : '', customer: cancelled ? '(cancelled)' : customer, customerKey: cancelled ? '' : spKey(customer),
+      basic: spRound2(basic), igst: spRound2(o.igst), cgst: spRound2(o.cgst), sgst: spRound2(o.sgst), roundOff: spRound2(o.round), otherCharges: spRound2(o.other),
+      total: spRound2(total), cancelled
+    });
+  }
+  const seen = {}; invoices.forEach(v => { const k = v.fy + '|' + v.voucherNo; if (seen[k]) errors.push('Voucher number ' + v.voucherNo + ' appears twice'); seen[k] = 1; });
+  const live = invoices.filter(v => !v.cancelled);
+  const sum = f => spRound2(live.reduce((a, v) => a + v[f], 0));
+  const totals = { basic: sum('basic'), total: sum('total'), igst: sum('igst'), cgst: sum('cgst'), sgst: sum('sgst') };
+  const recon = [];
+  if (grand) {
+    const chk = (label, mine, idx) => { if (idx < 0) return; const g = spNum(grand[idx]); recon.push({ label, mine, tally: g, ok: Math.abs(mine - g) <= 1 }); };
+    chk('Value (basic)', totals.basic, cValue); chk('Gross Total', totals.total, cGross);
+    Object.keys(kinds).forEach(i => { if (kinds[i] === 'igst') chk('IGST', totals.igst, +i); if (kinds[i] === 'cgst') chk('CGST', totals.cgst, +i); if (kinds[i] === 'sgst') chk('SGST', totals.sgst, +i); });
+    recon.filter(x => !x.ok).forEach(x => errors.push('Total of ' + x.label + ' is ' + x.mine + ' but the Tally Grand Total is ' + x.tally));
+  } else warnings.push('Grand Total row not found, so totals could not be checked against Tally.');
+  if (!invoices.length) errors.push('No invoice rows found.');
+  const periodLine = rows.slice(0, hi).map(r => spCleanName(r[0])).find(t => /^\d{1,2}-[A-Za-z]{3}-\d{2}\s+to\s+/i.test(t)) || '';
+  return { ok: errors.length === 0, errors, warnings, invoices, totals, recon, period: periodLine, liveCount: live.length, cancelledCount: invoices.length - live.length };
+}
+
+function spParseCreditors(text) {
+  const rows = spCsvRows(text);
+  const hi = rows.findIndex(r => spCleanName(r[0]).toLowerCase() === 'particulars');
+  if (hi < 0) return { ok: false, errors: ['Heading row (Particulars) not found. Is this the Tally Sundry Creditors group summary?'] };
+  let start = hi + 1;
+  while (start < rows.length && !/^balance$/i.test(spCleanName(rows[start][1]) ) ) { start++; if (start > hi + 6) break; }
+  start++; // first data row after "Balance,Debit,Credit,Balance"
+  const vendors = [], errors = [], warnings = []; let grand = null; let cleaned = [];
+  for (let r = start; r < rows.length; r++) {
+    const row = rows[r]; if (!row || row.every(c => !spCleanName(c))) continue;
+    const raw = String(row[0] == null ? '' : row[0]), name = spCleanName(raw);
+    if (/^grand total$/i.test(name)) { grand = row; continue; }
+    if (name !== raw) cleaned.push(name);
+    const op = spAmt(row[1]), dr = spAmt(row[2]), cr = spAmt(row[3]), cl = spAmt(row[4]);
+    if ([op, dr, cr, cl].some(x => isNaN(x.n))) { errors.push('Vendor "' + name + '": an amount could not be read'); continue; }
+    const sg = x => x.side === 'dr' ? -x.n : x.n; // credit positive
+    const calc = sg(op) + cr.n - dr.n, closing = sg(cl);
+    if (Math.abs(calc - closing) > 1) errors.push('Vendor "' + name + '": opening + credit - debit = ' + spRound2(calc) + ' but closing is ' + spRound2(closing));
+    vendors.push({
+      name, key: spKey(name), docId: spDocId(name), opening: spRound2(sg(op)), debit: spRound2(dr.n), credit: spRound2(cr.n),
+      closing: spRound2(closing), weOwe: closing > 0 ? spRound2(closing) : 0, advance: closing < 0 ? spRound2(-closing) : 0
+    });
+  }
+  const ids = {}; vendors.forEach(v => { if (ids[v.docId]) errors.push('Two vendors would share one record: "' + ids[v.docId] + '" and "' + v.name + '"'); ids[v.docId] = v.name; });
+  const sumF = f => spRound2(vendors.reduce((a, v) => a + v[f], 0));
+  const totals = { opening: sumF('opening'), debit: sumF('debit'), credit: sumF('credit'), closing: sumF('closing'), weOwe: sumF('weOwe'), advance: sumF('advance') };
+  const recon = [];
+  if (grand) {
+    const g = { opening: (a => a.side === 'dr' ? -a.n : a.n)(spAmt(grand[1])), debit: spNum(grand[2]), credit: spNum(grand[3]), closing: (a => a.side === 'dr' ? -a.n : a.n)(spAmt(grand[4])) };
+    [['Opening', totals.opening, g.opening], ['Debit', totals.debit, g.debit], ['Credit', totals.credit, g.credit], ['Closing (net)', totals.closing, g.closing]].forEach(([label, mine, tally]) => {
+      const ok = Math.abs(mine - tally) <= 1; recon.push({ label, mine, tally, ok });
+      if (!ok) errors.push('Total of ' + label + ' is ' + mine + ' but the Tally Grand Total is ' + tally);
+    });
+  } else warnings.push('Grand Total row not found, so totals could not be checked against Tally.');
+  if (!vendors.length) errors.push('No vendor rows found.');
+  const periodLine = rows.slice(0, hi).map(r => spCleanName(r[0])).find(t => /^\d{1,2}-[A-Za-z]{3}-\d{2}\s+to\s+/i.test(t)) || '';
+  return { ok: errors.length === 0, errors, warnings, vendors, totals, recon, cleanedNames: cleaned, period: periodLine };
+}
+
+// ══ SyProC data tabs: UI, upload and live listeners ══
+const SP_SALES_COL = 'dqap_sales_invoices', SP_SALES_META = 'dqap_sales_meta';
+const SP_CRED_COL = 'dqap_creditors_vendors', SP_CRED_META = 'dqap_creditors_meta';
+const SP_CRM_TARGETS = 'dqap_crm_targets';
+let spSales = [], spSalesMeta = null, spVendors = [], spCredMeta = null, spTargets = [];
+let spSalesParsed = null, spCredParsed = null, spListening = false;
+const spInr = n => (n < 0 ? '-' : '') + '₹' + Math.abs(Number(n || 0)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const spLakh = n => '₹' + (Number(n || 0) / 100000).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' L';
+const spEsc = v => escapeDebtHtml(v == null ? '' : v);
+function spCanCreditors() { return ['dev', 'updesh', 'pratim'].includes(debtUsername()); }
+function spCanPlan() { return ['updesh', 'pratim'].includes(debtUsername()); }
+function spStamp(ts) { try { const d = ts && ts.toDate ? ts.toDate() : new Date(ts); return d.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } }
+
+function spStartListeners() {
+  if (spListening) return; spListening = true;
+  db.collection(SP_SALES_COL).onSnapshot(sn => { spSales = sn.docs.map(d => d.data()); spRenderSales(); }, () => {});
+  db.collection(SP_SALES_META).doc('latest').onSnapshot(d => { spSalesMeta = d.exists ? d.data() : null; spRenderSales(); }, () => {});
+  db.collection(SP_CRM_TARGETS).get().then(sn => { spTargets = sn.docs.map(d => d.data()).filter(t => t.targetType === 'annual-plan'); spRenderSales(); }).catch(() => {});
+  if (spCanCreditors()) {
+    db.collection(SP_CRED_COL).onSnapshot(sn => { spVendors = sn.docs.map(d => ({ id: d.id, ...d.data() })); spRenderCreditors(); }, () => {});
+    db.collection(SP_CRED_META).doc('latest').onSnapshot(d => { spCredMeta = d.exists ? d.data() : null; spRenderCreditors(); }, () => {});
+  }
+}
+
+function spCheckBox(res, extra) {
+  const ok = res.ok;
+  let h = '<div style="padding:10px 12px;border-radius:8px;margin-top:12px;font-size:12px;background:' + (ok ? '#E8F5E9' : '#FDECEA') + ';border-left:4px solid ' + (ok ? '#4CAF50' : '#D32F2F') + '">';
+  h += '<b>' + (ok ? 'File checks passed' : 'File checks failed. Nothing will be imported.') + '</b>' + (res.period ? ' &middot; ' + spEsc(res.period) : '');
+  if (res.recon && res.recon.length) h += '<div style="margin-top:6px">' + res.recon.map(x => (x.ok ? '✓ ' : '✗ ') + spEsc(x.label) + ': file ' + spInr(x.mine) + ' vs Tally Grand Total ' + spInr(x.tally)).join('<br>') + '</div>';
+  if (extra) h += '<div style="margin-top:6px">' + extra + '</div>';
+  if (res.errors.length) h += '<div style="margin-top:6px;color:#B71C1C">' + res.errors.slice(0, 12).map(spEsc).join('<br>') + (res.errors.length > 12 ? '<br>and ' + (res.errors.length - 12) + ' more' : '') + '</div>';
+  if (res.warnings && res.warnings.length) h += '<div style="margin-top:6px;color:#8a5a00">' + res.warnings.slice(0, 6).map(spEsc).join('<br>') + '</div>';
+  return h + '</div>';
+}
+
+// ── SalesTD ──
+function spSalesFile(e) {
+  const f = e.target.files[0]; if (!f) return;
+  if (!canUploadCSV()) { showToast('Only dev and updesh can upload the sales register', 'error'); e.target.value = ''; return; }
+  const rd = new FileReader();
+  rd.onload = ev => {
+    spSalesParsed = spParseSales(ev.target.result);
+    const r = spSalesParsed, box = document.getElementById('spSalesCheck');
+    if (r.invoices) box.innerHTML = spCheckBox(r, r.liveCount + ' invoices, ' + r.cancelledCount + ' cancelled vouchers. Basic ' + spInr(r.totals.basic) + ', total ' + spInr(r.totals.total) + '.');
+    else box.innerHTML = spCheckBox(r);
+    document.getElementById('spSalesImportBtn').style.display = r.ok ? 'inline-flex' : 'none';
+  };
+  rd.readAsText(f);
+}
+async function spImportSales() {
+  const r = spSalesParsed; if (!r || !r.ok || !canUploadCSV()) return;
+  const btn = document.getElementById('spSalesImportBtn'); btn.disabled = true;
+  try {
+    const uploadId = Date.now() + '-' + debtUsername();
+    for (let i = 0; i < r.invoices.length; i += 400) {
+      const b = db.batch();
+      r.invoices.slice(i, i + 400).forEach(v => b.set(db.collection(SP_SALES_COL).doc(v.fy + '_' + v.voucherNo.replace(/[\/\s]+/g, '-')), { ...v, uploadId, uploadedBy: debtUsername(), uploadedAt: firebase.firestore.FieldValue.serverTimestamp() }));
+      await b.commit();
+    }
+    await db.collection(SP_SALES_META).doc('latest').set({ uploadId, uploadedBy: debtUsername(), uploadedAt: firebase.firestore.FieldValue.serverTimestamp(), period: r.period, invoiceCount: r.liveCount, cancelledCount: r.cancelledCount, basicTotal: r.totals.basic, grossTotal: r.totals.total });
+    showToast('Sales register imported: ' + r.liveCount + ' invoices');
+    spSalesParsed = null; document.getElementById('spSalesCheck').innerHTML = ''; btn.style.display = 'none'; document.getElementById('spSalesFile').value = '';
+  } catch (e) { showToast('Import failed: ' + (e.message || e), 'error'); }
+  btn.disabled = false;
+}
+function spFyOptions() { const s = new Set(spSales.map(v => v.fy)); return [...s].sort().reverse(); }
+function spTargetFor(fy, quarter) {
+  // CRM targets are stored per calendar year with calendar quarters q1..q4 (Jan-Mar = q1). FY 2026-27 = q2..q4 of 2026 plus q1 of 2027.
+  const y = parseInt(String(fy).slice(0, 4), 10); if (!y || !spTargets.length) return null;
+  const part = (year, q) => spTargets.filter(t => Number(t.year) === year).reduce((a, t) => a + Number(((t.quarterTargets || {})['q' + q] || {}).billing || 0), 0);
+  const map = { 1: [[y, 2]], 2: [[y, 3]], 3: [[y, 4]], 4: [[y + 1, 1]] };
+  const list = quarter ? map[quarter] : [[y, 2], [y, 3], [y, 4], [y + 1, 1]];
+  const t = list.reduce((a, [yy, q]) => a + part(yy, q), 0);
+  return t > 0 ? t : null;
+}
+function spRenderSales() {
+  const host = document.getElementById('spSalesBody'); if (!host) return;
+  const fySel = document.getElementById('spFy'), qSel = document.getElementById('spQ'), mSel = document.getElementById('spM');
+  const opts = spFyOptions(); const prevFy = fySel.value;
+  fySel.innerHTML = opts.length ? opts.map(f => '<option>' + f + '</option>').join('') : '<option value="">No data</option>';
+  if (opts.includes(prevFy)) fySel.value = prevFy;
+  const fy = fySel.value, q = parseInt(qSel.value, 10) || 0, m = mSel.value, term = (document.getElementById('spCust').value || '').trim().toLowerCase();
+  let rows = spSales.filter(v => v.fy === fy);
+  const months = [...new Set(rows.map(v => v.month))].sort(); const prevM = mSel.value;
+  mSel.innerHTML = '<option value="">All months</option>' + months.map(x => '<option value="' + x + '">' + x + '</option>').join(''); mSel.value = months.includes(prevM) ? prevM : '';
+  const inQ = rows.filter(v => !q || v.fyQuarter === q);
+  const filtered = inQ.filter(v => (!mSel.value || v.month === mSel.value) && (!term || (v.customer || '').toLowerCase().includes(term) || (v.voucherNo || '').toLowerCase().includes(term))).sort((a, b) => (b.date + b.voucherNo).localeCompare(a.date + a.voucherNo));
+  const live = filtered.filter(v => !v.cancelled), sum = f => live.reduce((a, v) => a + (v[f] || 0), 0);
+  const basic = sum('basic'), qBasic = inQ.filter(v => !v.cancelled).reduce((a, v) => a + v.basic, 0);
+  const target = spTargetFor(fy, q);
+  let perf = target ? '<div class="stat"><div class="stat-label">Company billing target' + (q ? ' (Q' + q + ')' : ' (year)') + '</div><div class="stat-value">' + spLakh(target) + '</div><div style="font-size:11px;color:var(--t2);margin-top:4px">Invoiced ' + Math.round(qBasic / target * 100) + '% of target (basic value, all customers)</div></div>'
+    : '<div class="stat"><div class="stat-label">Company billing target</div><div class="stat-value">-</div><div style="font-size:11px;color:var(--t2);margin-top:4px">No CRM annual plan found for this year</div></div>';
+  const meta = spSalesMeta ? 'Last upload: ' + spEsc(spStamp(spSalesMeta.uploadedAt)) + ' by ' + spEsc(spSalesMeta.uploadedBy) + ' &middot; ' + spEsc(spSalesMeta.period || '') : 'No sales register uploaded yet';
+  document.getElementById('spSalesMeta').innerHTML = meta;
+  host.innerHTML = '<div class="stats"><div class="stat"><div class="stat-label">Invoiced, basic value</div><div class="stat-value">' + spLakh(basic) + '</div></div><div class="stat"><div class="stat-label">Total with GST</div><div class="stat-value">' + spLakh(sum('total')) + '</div></div><div class="stat"><div class="stat-label">Invoices</div><div class="stat-value">' + live.length + '</div></div>' + perf + '</div>' +
+    '<div class="card" style="overflow-x:auto"><table><thead><tr><th>Date</th><th>Invoice no.</th><th>Customer</th><th style="text-align:right">Basic</th><th style="text-align:right">CGST</th><th style="text-align:right">SGST</th><th style="text-align:right">IGST</th><th style="text-align:right">Other</th><th style="text-align:right">Total</th></tr></thead><tbody>' +
+    (filtered.length ? filtered.slice(0, 600).map(v => '<tr' + (v.cancelled ? ' style="color:#999;text-decoration:line-through"' : '') + '><td>' + spEsc(v.date) + '</td><td>' + spEsc(v.voucherNo) + '</td><td><strong>' + spEsc(v.customer) + '</strong></td><td style="text-align:right">' + spInr(v.basic) + '</td><td style="text-align:right">' + spInr(v.cgst) + '</td><td style="text-align:right">' + spInr(v.sgst) + '</td><td style="text-align:right">' + spInr(v.igst) + '</td><td style="text-align:right">' + spInr((v.otherCharges || 0) + (v.roundOff || 0)) + '</td><td style="text-align:right">' + spInr(v.total) + '</td></tr>').join('') : '<tr><td colspan="9" style="text-align:center;color:var(--t2)">No invoices for this selection</td></tr>') +
+    '</tbody></table></div>';
+}
+
+// ── Creditors ──
+function spCredFile(e) {
+  const f = e.target.files[0]; if (!f) return;
+  if (!canUploadCSV()) { showToast('Only dev and updesh can upload the creditors file', 'error'); e.target.value = ''; return; }
+  const rd = new FileReader();
+  rd.onload = ev => {
+    spCredParsed = spParseCreditors(ev.target.result);
+    const r = spCredParsed, box = document.getElementById('spCredCheck');
+    let extra = '';
+    if (r.vendors) {
+      extra = r.vendors.length + ' vendors read. We owe ' + spInr(r.totals.weOwe) + ', advances / receivable ' + spInr(r.totals.advance) + ', net ' + spInr(r.totals.closing) + '.';
+      extra += '<br>' + r.cleanedNames.length + ' names cleaned' + (r.cleanedNames.length ? ': ' + r.cleanedNames.map(spEsc).join(', ') : '') + '.';
+      const have = new Set(r.vendors.map(v => v.docId)); const missing = spVendors.filter(v => !have.has(v.id) && (v.plans || []).some(p => !p.done));
+      if (missing.length) extra += '<br><b>Vendors with a payment plan that are missing from this file:</b> ' + missing.map(v => spEsc(v.name)).join(', ');
+    }
+    box.innerHTML = spCheckBox(r, extra);
+    document.getElementById('spCredImportBtn').style.display = r.ok ? 'inline-flex' : 'none';
+  };
+  rd.readAsText(f);
+}
+async function spImportCreditors() {
+  const r = spCredParsed; if (!r || !r.ok || !canUploadCSV()) return;
+  const btn = document.getElementById('spCredImportBtn'); btn.disabled = true;
+  try {
+    const uploadId = Date.now() + '-' + debtUsername();
+    for (let i = 0; i < r.vendors.length; i += 400) {
+      const b = db.batch();
+      r.vendors.slice(i, i + 400).forEach(v => b.set(db.collection(SP_CRED_COL).doc(v.docId), { name: v.name, key: v.key, opening: v.opening, debit: v.debit, credit: v.credit, closing: v.closing, weOwe: v.weOwe, advance: v.advance, uploadId, inLatestFile: true }, { merge: true }));
+      await b.commit();
+    }
+    const have = new Set(r.vendors.map(v => v.docId)), stale = spVendors.filter(v => !have.has(v.id));
+    for (let i = 0; i < stale.length; i += 400) { const b = db.batch(); stale.slice(i, i + 400).forEach(v => b.set(db.collection(SP_CRED_COL).doc(v.id), { inLatestFile: false }, { merge: true })); await b.commit(); }
+    await db.collection(SP_CRED_META).doc('latest').set({ uploadId, uploadedBy: debtUsername(), uploadedAt: firebase.firestore.FieldValue.serverTimestamp(), period: r.period, vendorCount: r.vendors.length, weOweTotal: r.totals.weOwe, advanceTotal: r.totals.advance, netTotal: r.totals.closing, namesCleaned: r.cleanedNames.length });
+    showToast('Creditors imported: ' + r.vendors.length + ' vendors');
+    spCredParsed = null; document.getElementById('spCredCheck').innerHTML = ''; btn.style.display = 'none'; document.getElementById('spCredFile').value = '';
+  } catch (e) { showToast('Import failed: ' + (e.message || e), 'error'); }
+  btn.disabled = false;
+}
+async function spAddPlan(id) {
+  if (!spCanPlan()) return;
+  const d = document.getElementById('spPd_' + id).value, a = parseFloat(document.getElementById('spPa_' + id).value);
+  if (!d || !(a > 0)) { showToast('Enter a payment date and an amount', 'error'); return; }
+  const v = spVendors.find(x => x.id === id); const plans = (v.plans || []).concat([{ date: d, amount: a, done: false, by: debtUsername() }]);
+  try { await db.collection(SP_CRED_COL).doc(id).set({ plans }, { merge: true }); } catch (e) { showToast('Could not save: ' + (e.message || e), 'error'); }
+}
+async function spPlanAction(id, idx, act) {
+  if (!spCanPlan()) return; const v = spVendors.find(x => x.id === id); if (!v) return;
+  const plans = (v.plans || []).slice(); if (act === 'del') plans.splice(idx, 1); else plans[idx] = { ...plans[idx], done: !plans[idx].done };
+  try { await db.collection(SP_CRED_COL).doc(id).set({ plans }, { merge: true }); } catch (e) { showToast('Could not save: ' + (e.message || e), 'error'); }
+}
+function spRenderCreditors() {
+  const host = document.getElementById('spCredBody'); if (!host) return;
+  const term = (document.getElementById('spVend').value || '').trim().toLowerCase();
+  const all = spVendors.filter(v => v.inLatestFile !== false);
+  const rows = all.filter(v => !term || (v.name || '').toLowerCase().includes(term)).sort((a, b) => (b.weOwe || 0) - (a.weOwe || 0) || (b.advance || 0) - (a.advance || 0));
+  const owe = all.reduce((a, v) => a + (v.weOwe || 0), 0), adv = all.reduce((a, v) => a + (v.advance || 0), 0);
+  const planned = all.reduce((a, v) => a + (v.plans || []).filter(p => !p.done).reduce((s, p) => s + p.amount, 0), 0);
+  const toPlan = all.filter(v => (v.weOwe || 0) > 0 && !(v.plans || []).some(p => !p.done)).length;
+  document.getElementById('spCredMeta').innerHTML = spCredMeta ? 'Last upload: ' + spEsc(spStamp(spCredMeta.uploadedAt)) + ' by ' + spEsc(spCredMeta.uploadedBy) + ' &middot; ' + spEsc(spCredMeta.period || '') : 'No creditors file uploaded yet';
+  const planCell = v => {
+    const lines = (v.plans || []).map((p, i) => '<div style="font-size:11px;' + (p.done ? 'color:#999;text-decoration:line-through' : '') + '">' + spEsc(p.date) + ' &middot; ' + spInr(p.amount) + (spCanPlan() ? ' <a href="#" onclick="spPlanAction(\'' + v.id + '\',' + i + ',\'done\');return false">' + (p.done ? 'undo' : 'paid') + '</a> <a href="#" onclick="spPlanAction(\'' + v.id + '\',' + i + ',\'del\');return false">remove</a>' : '') + '</div>').join('');
+    const form = spCanPlan() && v.weOwe > 0 ? '<div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap"><input type="date" id="spPd_' + v.id + '" style="font-size:11px;padding:3px"><input type="number" id="spPa_' + v.id + '" placeholder="Amount" style="font-size:11px;padding:3px;width:90px"><button class="btn sm" onclick="spAddPlan(\'' + v.id + '\')">Add</button></div>' : '';
+    return lines + form;
+  };
+  host.innerHTML = '<div class="stats"><div class="stat"><div class="stat-label">We owe (credit balances)</div><div class="stat-value">' + spLakh(owe) + '</div></div><div class="stat"><div class="stat-label">Advance / receivable (debit balances)</div><div class="stat-value">' + spLakh(adv) + '</div></div><div class="stat"><div class="stat-label">Net payable</div><div class="stat-value">' + spLakh(owe - adv) + '</div></div><div class="stat"><div class="stat-label">Planned, unpaid</div><div class="stat-value">' + spLakh(planned) + '</div><div style="font-size:11px;color:var(--t2);margin-top:4px">' + toPlan + ' vendors still to plan</div></div></div>' +
+    '<div class="card" style="overflow-x:auto"><table><thead><tr><th>Vendor</th><th style="text-align:right">Opening</th><th style="text-align:right">Debit</th><th style="text-align:right">Credit</th><th style="text-align:right">We owe</th><th style="text-align:right">Advance / receivable</th><th>Payment plan</th></tr></thead><tbody>' +
+    (rows.length ? rows.map(v => '<tr><td><strong>' + spEsc(v.name) + '</strong></td><td style="text-align:right">' + spInr(v.opening) + '</td><td style="text-align:right">' + spInr(v.debit) + '</td><td style="text-align:right">' + spInr(v.credit) + '</td><td style="text-align:right">' + (v.weOwe ? '<b>' + spInr(v.weOwe) + '</b>' : '-') + '</td><td style="text-align:right">' + (v.advance ? spInr(v.advance) : '-') + '</td><td>' + planCell(v) + '</td></tr>').join('') : '<tr><td colspan="7" style="text-align:center;color:var(--t2)">No vendors yet</td></tr>') +
+    '</tbody></table></div>';
+}
+function spShowUploadBlocks() {
+  const up = canUploadCSV();
+  ['spSalesUpload', 'spCredUpload'].forEach(id => { const e = document.getElementById(id); if (e) e.style.display = up ? '' : 'none'; });
+}
+
 </script>
 
 </body>
